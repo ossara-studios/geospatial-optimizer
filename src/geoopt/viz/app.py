@@ -49,10 +49,11 @@ def run_view(run_dir: Path) -> None:
     z_level = None
     if grid is not None:
         zs = sorted(grid["z"].unique())
+        richest = grid.groupby("z")["p_ore"].mean().idxmax()
         z_level = st.select_slider(
             "Plan slice elevation (m)",
             options=zs,
-            value=zs[len(zs) // 2],
+            value=richest,
             format_func=lambda v: f"{v:.0f}",
         )
     st.plotly_chart(
@@ -87,7 +88,7 @@ def run_view(run_dir: Path) -> None:
         x_level = st.select_slider(
             "Section easting (m)",
             options=xs,
-            value=xs[len(xs) // 2],
+            value=grid.groupby("x")["p_ore"].mean().idxmax(),
             format_func=lambda v: f"{v:.0f}",
         )
         lab = data.drilled_composites(

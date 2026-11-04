@@ -31,7 +31,7 @@ loop:
   runs_dir: ../runs
   max_holes: 20
   max_metres: null      # stop early once this many metres are drilled
-  eval_grid: [30, 30, 12]
+  eval_grid: [40, 64, 16]  # x, y, z cells over the candidate extent (viz only)
   live_lab_dir: ../runs/live_lab   # OPC UA mode: rig-sim writes, planner reads
 
 rig:
