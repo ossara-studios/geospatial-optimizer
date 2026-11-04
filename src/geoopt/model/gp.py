@@ -17,7 +17,7 @@ from geoopt.model.transforms import CoordScaler, to_log_grade
 log = logging.getLogger(__name__)
 
 torch.set_default_dtype(torch.float64)
-_PREDICT_CHUNK = 20_000
+_PREDICT_CHUNK = 2_000  # larger chunks build a dense test covariance and slow down sharply
 
 
 class OreModel(Protocol):
