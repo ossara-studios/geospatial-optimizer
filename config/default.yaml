@@ -36,6 +36,13 @@ model:
   refit_every: 10     # re-tune hyperparameters every k conditioning steps
   cv_folds: 5
 
+planner:
+  beta: 0.5             # exploration weight (unit-free when standardize is true)
+  standardize: true
+  min_spacing_m: 25.0   # soft penalty for collars closer than this to drilled holes
+  spacing_weight: 1.0
+  grid_spacing_m: 100.0
+
 opcua:
   # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).
   endpoint: opc.tcp://127.0.0.1:4840/geoopt/

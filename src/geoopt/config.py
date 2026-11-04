@@ -95,6 +95,15 @@ class ModelConfig(_Strict):
     cv_folds: int = Field(ge=2)
 
 
+class PlannerConfig(_Strict):
+    beta: float = Field(ge=0)  # weight on exploration (uncertainty) vs expected ore
+    # z-score both terms across candidates each iteration so beta is unit-free.
+    standardize: bool = True
+    min_spacing_m: float = Field(ge=0)
+    spacing_weight: float = Field(ge=0)
+    grid_spacing_m: float = Field(gt=0)  # GridStrategy node spacing
+
+
 class Config(_Strict):
     seed: int
     log_level: str = "INFO"
@@ -102,6 +111,7 @@ class Config(_Strict):
     composite: CompositeConfig
     split: SplitConfig
     model: ModelConfig
+    planner: PlannerConfig
     opcua: OpcUaConfig
     limits: Limits
     nodes: NodeMap

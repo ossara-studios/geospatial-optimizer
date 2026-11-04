@@ -71,4 +71,6 @@ def build_candidates(
     points["length_m"] = points["to_m"] - points["from_m"]
     points["depth"] = (points["from_m"] + points["to_m"]) / 2
     points = desurvey(collars, surveys, points)
-    return cand[CANDIDATE_COLUMNS], points[CANDIDATE_POINT_COLUMNS]
+    # drill_date is timing, not grade: it drives the historical-order baseline.
+    cols = CANDIDATE_COLUMNS + (["drill_date"] if "drill_date" in cand else [])
+    return cand[cols], points[CANDIDATE_POINT_COLUMNS]
