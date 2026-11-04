@@ -27,6 +27,13 @@ In another, send one recommendation:
 ```
 To test against real EAE, pass `--endpoint opc.tcp://<eae-host>:<port>`. See [docs/eae_contract.md](docs/eae_contract.md).
 
+## Visualizer
+```bash
+.venv/bin/geoopt viz
+```
+Opens on http://localhost:8501. The Run tab shows any run in `runs/` (turn on live refresh during
+an OPC UA run); the Backtest tab shows `runs/backtest` results.
+
 ## Checks
 ```bash
 .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/pytest -q

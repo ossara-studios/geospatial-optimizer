@@ -40,6 +40,8 @@ class IterationRecord:
     metres_drilled: float = 0.0
     composites_ingested: int = 0
     cumulative_metres: float = 0.0
+    prob_ore: float = 0.0
+    breakdown: dict[str, float] = field(default_factory=dict)
     timings_s: dict[str, float] = field(default_factory=dict)
 
 
@@ -148,6 +150,8 @@ class DecisionLoop:
             check_reason=check.reason.name,
             checked_depth=check.depth,
             cumulative_metres=self._metres,
+            prob_ore=msg.prob_ore,
+            breakdown=rec.breakdown,
             timings_s=t,
         )
         if check.status is CheckStatus.REJECTED:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import subprocess
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -99,3 +101,21 @@ def emulator(
     approver = auto_approve if auto_approve_all else cli_approve
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(serve(cfg, approver))
+
+
+@app.command()
+def viz(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+    port: Annotated[int, typer.Option(help="Streamlit port.")] = 8501,
+) -> None:
+    """Open the run/backtest visualizer (Streamlit) in the browser."""
+    app_path = Path(__file__).parent / "viz" / "app.py"
+    cmd = [
+        sys.executable, "-m", "streamlit", "run", str(app_path),
+        "--server.port", str(port),
+        "--server.address", "localhost",
+        "--server.headless", "true",
+        "--browser.gatherUsageStats", "false",
+    ]  # fmt: skip
+    with contextlib.suppress(KeyboardInterrupt):
+        subprocess.run([*cmd, "--", "--config", str(config.resolve())], check=False)
