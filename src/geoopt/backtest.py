@@ -16,16 +16,17 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from scipy.spatial import cKDTree
 
 from geoopt.config import Config, SeedSet
-from geoopt.data.prepare import prepare
+from geoopt.data.prepare import prepare, prepared_paths
 from geoopt.loop import IterationRecord
 from geoopt.metrics import classification, metres_to_target, on_metre_grid, ore_metres
 from geoopt.run import build_inprocess_loop
 
 log = logging.getLogger(__name__)
 
-CURVE_METRICS = ["ore_m", "f1_undrilled", "bacc_undrilled", "f1_all"]
+CURVE_METRICS = ["ore_m", "f1_undrilled", "bacc_undrilled", "f1_all", "f1_near", "bacc_near"]
 
 
 def _seed_set_cfg(cfg: Config, ss: SeedSet, out_dir: Path) -> Config:
@@ -50,9 +51,14 @@ async def _one_run(
 ) -> pd.DataFrame:
     loop, lab = build_inprocess_loop(cfg, strategy, run_dir, rng_seed=rng_seed, write_grid=False)
     truth = lab.truth_for_scoring()
+    seed_xyz = pd.read_parquet(prepared_paths(cfg.data.processed_dir).seed_composites)[
+        ["x", "y", "z"]
+    ].to_numpy()
+    known = [seed_xyz]  # composites with assays the planner has seen
     xyz = truth[["x", "y", "z"]].to_numpy()
     actual = (truth["cu"] > cfg.model.cutoff_pct).to_numpy()
     cutoff, threshold = cfg.model.cutoff_pct, cfg.backtest.ore_threshold
+    near_radius = cfg.backtest.near_radius_m
     rows: list[dict] = []
     found = {"ore_m": 0.0}
 
@@ -60,9 +66,13 @@ async def _one_run(
         if record is not None and record.metres_drilled > 0:
             released = pd.read_parquet(run_dir / "lab" / f"{record.hole_idx}.parquet")
             found["ore_m"] += ore_metres(released, cutoff)
+            known.append(released[["x", "y", "z"]].to_numpy())
         undrilled = ~truth["hole_idx"].isin(loop.drilled_holes).to_numpy()
         predicted = loop.model.prob_ore(xyz) > threshold
         und = classification(predicted[undrilled], actual[undrilled])
+        dist, _ = cKDTree(np.vstack(known)).query(xyz, distance_upper_bound=near_radius)
+        near = undrilled & np.isfinite(dist)
+        nr = classification(predicted[near], actual[near])
         rows.append(
             {
                 "seed_set": seed_set,
@@ -77,6 +87,10 @@ async def _one_run(
                 "bacc_undrilled": und["balanced_accuracy"],
                 "f1_all": classification(predicted, actual)["f1"],
                 "n_undrilled": und["n"],
+                "f1_near": nr["f1"],
+                "bacc_near": nr["balanced_accuracy"],
+                "n_near": nr["n"],
+                "ore_frac_near": float(actual[near].mean()) if near.any() else float("nan"),
             }
         )
 
@@ -183,7 +197,9 @@ def summarize_backtest(results: pd.DataFrame, cfg: Config, with_estimates: bool 
     for strategy, g in results.groupby("strategy"):
         runs = [r.sort_values("iteration") for _, r in g.groupby(["seed_set", "rng_seed"])]
         entry: dict = {"runs": len(runs)}
-        for metric in ("ore_m", "f1_undrilled", "bacc_undrilled"):
+        for metric in ("ore_m", "f1_undrilled", "bacc_undrilled", "f1_near", "bacc_near"):
+            if metric not in g:
+                continue
             vals = np.array([on_metre_grid(r, metric, checkpoints) for r in runs])
             entry[metric] = {
                 f"at_{int(c)}m": {
@@ -307,15 +323,14 @@ COLORS = {
 
 def plot_backtest(results: pd.DataFrame, cfg: Config, path: Path) -> None:
     grid = np.linspace(0, cfg.backtest.metre_budget, 101)
-    fig = make_subplots(
-        rows=1,
-        cols=2,
-        subplot_titles=(
-            f"Discovery: ore metres intersected (Cu > {cfg.model.cutoff_pct}%)",
-            "Delineation: F1 on undrilled held-out composites",
-        ),
-    )
-    for col, metric in enumerate(("ore_m", "f1_undrilled"), start=1):
+    metrics = ["ore_m", "f1_undrilled"] + (["f1_near"] if "f1_near" in results else [])
+    titles = [
+        f"Discovery: ore metres intersected (Cu > {cfg.model.cutoff_pct}%)",
+        "Delineation: F1 on all undrilled composites",
+        f"Delineation: F1 on undrilled composites within {cfg.backtest.near_radius_m:g} m of data",
+    ]
+    fig = make_subplots(rows=1, cols=len(metrics), subplot_titles=titles[: len(metrics)])
+    for col, metric in enumerate(metrics, start=1):
         for strategy, g in results.groupby("strategy"):
             runs = [r.sort_values("iteration") for _, r in g.groupby(["seed_set", "rng_seed"])]
             vals = np.array([on_metre_grid(r, metric, grid) for r in runs])

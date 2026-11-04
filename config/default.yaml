@@ -74,6 +74,7 @@ backtest:
   max_holes: 300
   ore_threshold: 0.5
   f1_target: 0.6
+  near_radius_m: 50.0   # near-data delineation zone; fixed before seeing its results
   beta_sweep: [1.0, 2.0, 4.0]  # fixed before seeing sweep results; planner.beta is the base
 
 opcua:

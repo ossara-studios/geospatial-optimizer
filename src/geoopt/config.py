@@ -167,6 +167,8 @@ class BacktestConfig(_Strict):
     max_holes: int = Field(gt=0)
     ore_threshold: float = Field(0.5, gt=0, lt=1)  # classify ore when P(ore) > this
     f1_target: float = Field(gt=0, le=1)  # "metres to target" uses this delineation F1
+    # Near-data delineation scores undrilled composites within this distance of any assayed one.
+    near_radius_m: float = Field(50.0, gt=0)
     beta_sweep: list[float] = []  # extra adaptive betas for `geoopt backtest --beta-sweep`
 
 
