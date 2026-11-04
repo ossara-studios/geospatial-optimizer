@@ -10,6 +10,8 @@ from typing import Annotated
 import typer
 
 from geoopt.config import DEFAULT_CONFIG_PATH, load_config
+from geoopt.data.load import DataConfigIncomplete
+from geoopt.data.prepare import prepare as prepare_data
 from geoopt.emulator.server import auto_approve, cli_approve, serve
 from geoopt.logging_setup import configure_logging
 
@@ -19,6 +21,21 @@ app = typer.Typer(no_args_is_help=True, add_completion=False)
 @app.callback()
 def main() -> None:
     """Geospatial Optimizer."""
+
+
+@app.command()
+def prepare(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+) -> None:
+    """Load raw drillhole data and write the processed seed/candidate/truth tables."""
+    cfg = load_config(config)
+    configure_logging(cfg.log_level)
+    try:
+        paths = prepare_data(cfg)
+    except DataConfigIncomplete as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"wrote {paths.meta.parent}")
 
 
 @app.command()

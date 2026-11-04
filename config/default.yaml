@@ -5,6 +5,28 @@ log_level: INFO
 limits_file: limits.yaml
 nodes_file: opcua_nodes.yaml
 
+data:
+  raw_dir: ../data/raw
+  processed_dir: ../data/processed
+  # Fill in after inspecting the Copper Creek files and writing docs/data_schema.md.
+  # Each table: {file: <name in raw_dir>, sheet: <Excel sheet or null>, columns: {canonical: raw}}.
+  collars: null
+  surveys: null
+  assays: null
+  depth_unit: null      # m | ft  (collar coordinates are WGS 84 UTM 12N metres per Faraday's notes)
+  cu_unit: null         # pct | ppm
+  dip_convention: null  # negative_down | positive_down
+  below_detection_factor: 0.5
+  origin: null
+
+composite:
+  length_m: 10.0
+  min_coverage: 0.5
+
+split:
+  n_seed: 20
+  method: spread   # earliest needs drill dates on every hole
+
 opcua:
   # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).
   endpoint: opc.tcp://127.0.0.1:4840/geoopt/

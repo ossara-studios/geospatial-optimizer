@@ -50,9 +50,45 @@ class NodeMap(_Strict):
     nodes: dict[str, NodeSpec]
 
 
+class TableSource(_Strict):
+    file: str  # relative to data.raw_dir; .csv or .xlsx
+    sheet: str | None = None  # Excel sheet name
+    columns: dict[str, str]  # canonical name -> raw column name
+
+
+class DataConfig(_Strict):
+    raw_dir: Path
+    processed_dir: Path
+    # Everything below must be confirmed against the real files (docs/data_schema.md);
+    # `geoopt prepare` refuses to run while any of it is null.
+    collars: TableSource | None = None
+    surveys: TableSource | None = None
+    assays: TableSource | None = None
+    depth_unit: Literal["m", "ft"] | None = None
+    cu_unit: Literal["pct", "ppm"] | None = None
+    dip_convention: Literal["negative_down", "positive_down"] | None = None
+    # Below-detection assays are stored as -DL; they become DL * this factor.
+    below_detection_factor: float = Field(0.5, ge=0, le=1)
+    # Local-coordinate origin in source CRS units; null = rounded minimum of collars.
+    origin: tuple[float, float, float] | None = None
+
+
+class CompositeConfig(_Strict):
+    length_m: float = Field(gt=0)
+    min_coverage: float = Field(ge=0, le=1)
+
+
+class SplitConfig(_Strict):
+    n_seed: int = Field(gt=0)
+    method: Literal["earliest", "spread"]
+
+
 class Config(_Strict):
     seed: int
     log_level: str = "INFO"
+    data: DataConfig
+    composite: CompositeConfig
+    split: SplitConfig
     opcua: OpcUaConfig
     limits: Limits
     nodes: NodeMap
@@ -69,4 +105,6 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     base = path.parent
     raw["limits"] = _read_yaml(base / raw.pop("limits_file"))
     raw["nodes"] = _read_yaml(base / raw.pop("nodes_file"))
+    for key in ("raw_dir", "processed_dir"):
+        raw["data"][key] = (base / raw["data"][key]).resolve()
     return Config.model_validate(raw)

@@ -9,6 +9,9 @@ description = "Adaptive exploration drillhole planner with an EAE (IEC 61499) OP
 requires-python = ">=3.11"
 dependencies = [
     "asyncua>=1.1",
+    "numpy>=1.26",
+    "pandas>=2.2",
+    "pyarrow>=15",
     "pydantic>=2.6",
     "pyyaml>=6.0",
     "typer>=0.12",
