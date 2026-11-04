@@ -83,12 +83,25 @@ class SplitConfig(_Strict):
     method: Literal["earliest", "spread"]
 
 
+class ModelConfig(_Strict):
+    # Model target is log(cu + log_eps), cu in %.
+    log_eps: float = Field(gt=0)
+    # Ore cutoff, % Cu. Placeholder until the team picks one from the deposit's resource report.
+    cutoff_pct: float = Field(gt=0)
+    max_train: int = Field(gt=0)
+    fit_iters: int = Field(gt=0)
+    lr: float = Field(gt=0)
+    refit_every: int = Field(ge=0)  # 0 = never re-tune after the seed fit
+    cv_folds: int = Field(ge=2)
+
+
 class Config(_Strict):
     seed: int
     log_level: str = "INFO"
     data: DataConfig
     composite: CompositeConfig
     split: SplitConfig
+    model: ModelConfig
     opcua: OpcUaConfig
     limits: Limits
     nodes: NodeMap

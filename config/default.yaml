@@ -27,6 +27,15 @@ split:
   n_seed: 20
   method: spread   # earliest needs drill dates on every hole
 
+model:
+  log_eps: 0.001      # % Cu added before log (below-detection values stay finite)
+  cutoff_pct: 0.2     # PLACEHOLDER: team to set from the deposit's resource report
+  max_train: 6000     # exact-GP cap; older points are subsampled beyond this
+  fit_iters: 150
+  lr: 0.05
+  refit_every: 10     # re-tune hyperparameters every k conditioning steps
+  cv_folds: 5
+
 opcua:
   # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).
   endpoint: opc.tcp://127.0.0.1:4840/geoopt/

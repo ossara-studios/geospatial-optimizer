@@ -16,6 +16,8 @@ jobs:
       - name: Install
         run: |
           python -m venv .venv
+          # CPU-only torch: the default Linux wheel pulls several GB of CUDA libraries.
+          .venv/bin/pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
           .venv/bin/pip install -r requirements.lock
           .venv/bin/pip install --no-deps -e .
       - name: Lint
