@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.spatial import cKDTree
 
-from geoopt.config import Config, SeedSet
+from geoopt.config import AdaptiveVariant, Config, SeedSet
 from geoopt.data.prepare import prepare, prepared_paths
 from geoopt.loop import IterationRecord
 from geoopt.metrics import classification, metres_to_target, on_metre_grid, ore_metres
@@ -78,6 +78,7 @@ async def _one_run(
                 "seed_set": seed_set,
                 "strategy": label or strategy,
                 "beta": cfg.planner.beta if strategy == "adaptive" else float("nan"),
+                "gamma": cfg.planner.gamma if strategy == "adaptive" else float("nan"),
                 "rng_seed": rng_seed,
                 "iteration": 0 if record is None else record.iteration,
                 "holes": len(loop.drilled_holes),
@@ -137,50 +138,77 @@ def run_backtest(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
 
 
 def run_beta_sweep(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
-    """Adaptive at each `backtest.beta_sweep` beta, on the main backtest's seed sets and budget.
+    """Adaptive at each `backtest.beta_sweep` beta (gamma 0)."""
+    variants = [AdaptiveVariant(beta=b) for b in cfg.backtest.beta_sweep]
+    return _run_variants(cfg, variants, "beta_sweep", out_dir)
 
-    Writes `<out_dir>/beta_sweep/`; if the main backtest's results.parquet exists, its runs
-    (adaptive at planner.beta and every baseline) are included for comparison.
+
+def run_boundary_sweep(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
+    """Adaptive at each `backtest.boundary_sweep` (beta, gamma); joins the beta sweep too."""
+    return _run_variants(
+        cfg, cfg.backtest.boundary_sweep, "boundary_sweep", out_dir, ["beta_sweep"]
+    )
+
+
+def _run_variants(
+    cfg: Config,
+    variants: list[AdaptiveVariant],
+    name: str,
+    out_dir: Path | None,
+    join: list[str] | None = None,
+) -> pd.DataFrame:
+    """Adaptive variants on the main backtest's seed sets and budget, in `<out_dir>/<name>/`.
+
+    The main backtest's runs (adaptive at planner.beta and every baseline) and the runs of any
+    sweep named in `join` are included for comparison when they exist.
     """
     bt = cfg.backtest
     out_dir = out_dir or bt.out_dir
-    sweep_dir = out_dir / "beta_sweep"
+    sweep_dir = out_dir / name
     sweep_dir.mkdir(parents=True, exist_ok=True)
     frames = []
     for ss in bt.seed_sets:
         ss_cfg = _seed_set_cfg(cfg, ss, out_dir)
         prepare(ss_cfg)
-        for beta in bt.beta_sweep:
-            label = f"adaptive-b{beta:g}"
-            b_cfg = ss_cfg.model_copy(
-                update={"planner": ss_cfg.planner.model_copy(update={"beta": beta})}
+        for v in variants:
+            v_cfg = ss_cfg.model_copy(
+                update={
+                    "planner": ss_cfg.planner.model_copy(update={"beta": v.beta, "gamma": v.gamma})
+                }
             )
             t0 = time.perf_counter()
-            run_dir = sweep_dir / "runs" / ss.name / label
-            df = asyncio.run(_one_run(b_cfg, ss.name, "adaptive", cfg.seed, run_dir, label))
+            run_dir = sweep_dir / "runs" / ss.name / v.label
+            df = asyncio.run(_one_run(v_cfg, ss.name, "adaptive", cfg.seed, run_dir, v.label))
             frames.append(df)
             last = df.iloc[-1]
             log.info(
-                "beta_sweep seed_set=%s beta=%g holes=%d metres=%.0f ore_m=%.0f "
-                "f1_undrilled=%.3f seconds=%.0f",
+                "%s seed_set=%s variant=%s holes=%d metres=%.0f ore_m=%.0f "
+                "f1_undrilled=%.3f f1_near=%.3f seconds=%.0f",
+                name,
                 ss.name,
-                beta,
+                v.label,
                 last["holes"],
                 last["cum_metres"],
                 last["ore_m"],
                 last["f1_undrilled"],
+                last["f1_near"],
                 time.perf_counter() - t0,
             )
     results = pd.concat(frames, ignore_index=True)
-    main = out_dir / "results.parquet"
-    if main.exists():
-        base = pd.read_parquet(main)
-        base.loc[base["strategy"] == "adaptive", "strategy"] = f"adaptive-b{cfg.planner.beta:g}"
-        results = pd.concat([base, results], ignore_index=True)
+    others = [out_dir / "results.parquet"] + [out_dir / j / "results.parquet" for j in join or []]
+    for path in others:
+        if not path.exists():
+            continue
+        other = pd.read_parquet(path)
+        other.loc[other["strategy"] == "adaptive", "strategy"] = AdaptiveVariant(
+            beta=cfg.planner.beta, gamma=cfg.planner.gamma
+        ).label
+        other = other[~other["strategy"].isin(set(results["strategy"]))]
+        results = pd.concat([other, results], ignore_index=True)
     results.to_parquet(sweep_dir / "results.parquet", index=False)
     summary = summarize_backtest(results, cfg, with_estimates=False)
     (sweep_dir / "summary.json").write_text(json.dumps(summary, indent=2))
-    plot_backtest(results, cfg, sweep_dir / "beta_sweep.html")
+    plot_backtest(results, cfg, sweep_dir / f"{name}.html")
     return results
 
 
@@ -318,6 +346,9 @@ COLORS = {
     "adaptive-b1": "#6a51a3",
     "adaptive-b2": "#c2185b",
     "adaptive-b4": "#e6550d",
+    "adaptive-b0.5-g1": "#08519c",
+    "adaptive-b0.5-g2": "#000000",
+    "adaptive-b1-g1": "#9e0142",
 }
 
 

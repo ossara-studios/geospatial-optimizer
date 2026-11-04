@@ -13,6 +13,7 @@ SCORE_COLUMNS = [
     "explore",
     "exp_ore_per_m",
     "explore_per_m",
+    "boundary_per_m",
     "spacing_penalty",
     "score",
 ]
@@ -40,6 +41,7 @@ def score_candidates(
     std: np.ndarray,
     drilled_xy: np.ndarray,
     cfg: PlannerConfig,
+    p_latent: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Score candidate holes.
 
@@ -47,12 +49,18 @@ def score_candidates(
     (P(Cu > cutoff)) and `std` (latent log-grade std). Per hole:
         exp_ore_m = sum(P(ore) * l), explore = sum(sigma * l), both divided by depth,
     then optionally z-scored across candidates before score = ore + beta * explore - penalty.
+    With `p_latent` (latent P(ore)), boundary = sum(p * (1 - p) * l) / depth adds gamma * boundary.
     """
     per_point = pd.DataFrame(
         {
             "hole_idx": points["hole_idx"].to_numpy(),
             "ore_m": p_ore * points["length_m"].to_numpy(),
             "sigma_m": std * points["length_m"].to_numpy(),
+            "boundary_m": (
+                p_latent * (1 - p_latent) * points["length_m"].to_numpy()
+                if p_latent is not None
+                else 0.0
+            ),
         }
     )
     agg = per_point.groupby("hole_idx").sum()
@@ -63,12 +71,14 @@ def score_candidates(
     out["explore"] = out.pop("sigma_m")
     out["exp_ore_per_m"] = out["exp_ore_m"] / out["depth"]
     out["explore_per_m"] = out["explore"] / out["depth"]
+    out["boundary_per_m"] = out.pop("boundary_m") / out["depth"]
     ore = out["exp_ore_per_m"].to_numpy()
     explore = out["explore_per_m"].to_numpy()
+    boundary = out["boundary_per_m"].to_numpy()
     if cfg.standardize:
-        ore, explore = _zscore(ore), _zscore(explore)
+        ore, explore, boundary = _zscore(ore), _zscore(explore), _zscore(boundary)
     out["spacing_penalty"] = spacing_penalty(
         out[["x", "y"]].to_numpy(), drilled_xy, cfg.min_spacing_m, cfg.spacing_weight
     )
-    out["score"] = ore + cfg.beta * explore - out["spacing_penalty"]
+    out["score"] = ore + cfg.beta * explore + cfg.gamma * boundary - out["spacing_penalty"]
     return out[SCORE_COLUMNS].sort_values("score", ascending=False).reset_index(drop=True)

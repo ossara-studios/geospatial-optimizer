@@ -61,7 +61,8 @@ class AdaptiveStrategy:
         xyz = pts[["x", "y", "z"]].to_numpy()
         p_ore = state.model.prob_ore(xyz)
         _, std = state.model.predict(xyz)
-        scores = score_candidates(cand, pts, p_ore, std, state.drilled_xy, self._cfg)
+        p_latent = state.model.prob_ore(xyz, include_noise=False) if self._cfg.gamma else None
+        scores = score_candidates(cand, pts, p_ore, std, state.drilled_xy, self._cfg, p_latent)
         best = scores.iloc[0]
         depth = float(cand.loc[cand["hole_idx"] == best["hole_idx"], "depth"].iloc[0])
         return Recommendation(
@@ -71,7 +72,13 @@ class AdaptiveStrategy:
             prob_ore=float(best["exp_ore_m"] / depth),
             breakdown={
                 k: float(best[k])
-                for k in ("exp_ore_per_m", "explore_per_m", "explore", "spacing_penalty")
+                for k in (
+                    "exp_ore_per_m",
+                    "explore_per_m",
+                    "explore",
+                    "boundary_per_m",
+                    "spacing_penalty",
+                )
             },
         )
 

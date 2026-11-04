@@ -129,6 +129,8 @@ class ModelConfig(_Strict):
 
 class PlannerConfig(_Strict):
     beta: float = Field(ge=0)  # weight on exploration (uncertainty) vs expected ore
+    # Weight on boundary uncertainty: latent P(ore) * (1 - P(ore)), highest at ore/waste edges.
+    gamma: float = Field(0.0, ge=0)
     # z-score both terms across candidates each iteration so beta is unit-free.
     standardize: bool = True
     min_spacing_m: float = Field(ge=0)
@@ -151,6 +153,15 @@ class LoopConfig(_Strict):
     live_lab_dir: Path
 
 
+class AdaptiveVariant(_Strict):
+    beta: float = Field(ge=0)
+    gamma: float = Field(0.0, ge=0)
+
+    @property
+    def label(self) -> str:
+        return f"adaptive-b{self.beta:g}" + (f"-g{self.gamma:g}" if self.gamma else "")
+
+
 class SeedSet(_Strict):
     name: str
     method: Literal["earliest", "spread"]
@@ -170,6 +181,7 @@ class BacktestConfig(_Strict):
     # Near-data delineation scores undrilled composites within this distance of any assayed one.
     near_radius_m: float = Field(50.0, gt=0)
     beta_sweep: list[float] = []  # extra adaptive betas for `geoopt backtest --beta-sweep`
+    boundary_sweep: list[AdaptiveVariant] = []  # for `geoopt backtest --boundary-sweep`
 
 
 class EnvFactors(_Strict):

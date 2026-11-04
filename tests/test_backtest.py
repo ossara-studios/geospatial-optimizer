@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from geoopt.backtest import run_backtest, run_beta_sweep
-from geoopt.config import Config, SeedSet
+from geoopt.backtest import run_backtest, run_beta_sweep, run_boundary_sweep
+from geoopt.config import AdaptiveVariant, Config, SeedSet
 from geoopt.metrics import classification, metres_to_target, on_metre_grid, ore_metres
 
 
@@ -79,6 +79,7 @@ def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) ->
                     "metre_budget": 300.0,
                     "max_holes": 50,
                     "beta_sweep": [2.0],
+                    "boundary_sweep": [AdaptiveVariant(beta=0.5, gamma=1.0)],
                 }
             )
         }
@@ -90,3 +91,6 @@ def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) ->
     assert set(results.loc[results["strategy"] == "adaptive-b2", "beta"]) == {2.0}
     summary = json.loads((tmp_path / "bt" / "beta_sweep" / "summary.json").read_text())
     assert "bacc_undrilled" in summary["strategies"]["adaptive-b2"]
+    boundary = run_boundary_sweep(cfg, tmp_path / "bt")
+    assert set(boundary["strategy"]) == labels | {"adaptive-b0.5-g1"}
+    assert set(boundary.loc[boundary["strategy"] == "adaptive-b0.5-g1", "gamma"]) == {1.0}

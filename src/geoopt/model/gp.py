@@ -26,7 +26,9 @@ class OreModel(Protocol):
     def predict(
         self, xyz: np.ndarray, include_noise: bool = False
     ) -> tuple[np.ndarray, np.ndarray]: ...
-    def prob_ore(self, xyz: np.ndarray, cutoff_pct: float | None = None) -> np.ndarray: ...
+    def prob_ore(
+        self, xyz: np.ndarray, cutoff_pct: float | None = None, include_noise: bool = True
+    ) -> np.ndarray: ...
 
 
 class _ExactGP(gpytorch.models.ExactGP):
@@ -102,10 +104,16 @@ class GPOreModel:
             return np.empty(0), np.empty(0)
         return np.concatenate(means), np.concatenate(stds)
 
-    def prob_ore(self, xyz: np.ndarray, cutoff_pct: float | None = None) -> np.ndarray:
-        """P(Cu > cutoff) for a sample at each location, from the log-normal predictive."""
+    def prob_ore(
+        self, xyz: np.ndarray, cutoff_pct: float | None = None, include_noise: bool = True
+    ) -> np.ndarray:
+        """P(Cu > cutoff) from the log-normal predictive.
+
+        With `include_noise` (default) this is for a sample at each location. Without it, it is
+        for the smooth latent grade: near 0.5 only where the model can't call ore vs waste.
+        """
         cutoff = self._cfg.cutoff_pct if cutoff_pct is None else cutoff_pct
-        mean, std = self.predict(xyz, include_noise=True)
+        mean, std = self.predict(xyz, include_noise=include_noise)
         return norm.sf((np.log(cutoff + self._cfg.log_eps) - mean) / std)
 
     @property

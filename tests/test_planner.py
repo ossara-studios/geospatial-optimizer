@@ -50,7 +50,9 @@ class FakeModel:
     def __init__(self, p_by_x: dict[float, float], s_by_x: dict[float, float]) -> None:
         self.p, self.s = p_by_x, s_by_x
 
-    def prob_ore(self, xyz: np.ndarray, cutoff_pct: float | None = None) -> np.ndarray:
+    def prob_ore(
+        self, xyz: np.ndarray, cutoff_pct: float | None = None, include_noise: bool = True
+    ) -> np.ndarray:
         return np.array([self.p[x] for x in xyz[:, 0]])
 
     def predict(self, xyz: np.ndarray, include_noise: bool = False):
@@ -153,3 +155,22 @@ def test_no_candidates_left() -> None:
     cand, pts = _toy()
     with pytest.raises(LookupError):
         RandomStrategy(0).recommend(_state(cand, pts, available=set()))
+
+
+def test_boundary_term_prefers_holes_through_ore_waste_edges() -> None:
+    cand, pts = _toy()
+    xs = cand["x"].tolist()
+    p = dict(zip(xs, [0.5, 0.05, 0.95, 0.05, 0.05, 0.05], strict=True))
+    s = {x: 0.5 for x in xs}
+    pts_x = pts["x"].to_numpy()
+    p_latent = np.array([p[x] for x in pts_x])
+    no_gamma = score_candidates(cand, pts, p_latent, np.full(len(pts), 0.5), np.empty((0, 2)), CFG)
+    assert no_gamma.iloc[0]["hole_idx"] == 2  # most ore wins without the boundary term
+    edge = CFG.model_copy(update={"gamma": 4.0})
+    out = score_candidates(
+        cand, pts, p_latent, np.full(len(pts), 0.5), np.empty((0, 2)), edge, p_latent
+    )
+    assert out.iloc[0]["hole_idx"] == 0  # P = 0.5 maximises p(1-p)
+    assert out.set_index("hole_idx").loc[0, "boundary_per_m"] == pytest.approx(0.25)
+    strat = AdaptiveStrategy(edge)
+    assert strat.recommend(_state(cand, pts, FakeModel(p, s))).hole_idx == 0
