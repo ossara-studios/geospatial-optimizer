@@ -75,19 +75,20 @@ def backtest(
         bool,
         typer.Option("--boundary-sweep", help="Adaptive only, at each backtest.boundary_sweep."),
     ] = False,
+    workers: Annotated[int, typer.Option(help="Parallel runs (processes).")] = 1,
 ) -> None:
     """Run every strategy over every seed set with the same metre budget."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
     if boundary_sweep:
-        run_boundary_sweep(cfg)
+        run_boundary_sweep(cfg, workers=workers)
         typer.echo(f"wrote {cfg.backtest.out_dir / 'boundary_sweep'}")
         return
     if beta_sweep:
-        run_beta_sweep(cfg)
+        run_beta_sweep(cfg, workers=workers)
         typer.echo(f"wrote {cfg.backtest.out_dir / 'beta_sweep'}")
         return
-    run_backtest(cfg)
+    run_backtest(cfg, workers=workers)
     typer.echo(f"wrote {cfg.backtest.out_dir}")
 
 

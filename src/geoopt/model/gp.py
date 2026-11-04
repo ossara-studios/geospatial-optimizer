@@ -16,7 +16,6 @@ from geoopt.model.transforms import CoordScaler, to_log_grade
 
 log = logging.getLogger(__name__)
 
-torch.set_default_dtype(torch.float64)
 _PREDICT_CHUNK = 2_000  # larger chunks build a dense test covariance and slow down sharply
 
 
@@ -55,6 +54,11 @@ class GPOreModel:
 
     def __init__(self, cfg: ModelConfig, seed: int) -> None:
         self._cfg = cfg
+        self._device = _resolve_device(cfg.device)
+        dtype = cfg.dtype
+        if dtype == "auto":
+            dtype = "float32" if self._device.type == "cuda" else "float64"
+        self._dtype = torch.float32 if dtype == "float32" else torch.float64
         self._rng = np.random.default_rng(seed)
         torch.manual_seed(seed)
         self._scaler: CoordScaler | None = None
@@ -89,7 +93,7 @@ class GPOreModel:
     ) -> tuple[np.ndarray, np.ndarray]:
         """Mean and std of log grade. `include_noise` adds the nugget (sample-level)."""
         model, likelihood = self._require_fitted()
-        x = torch.as_tensor(self._scaler.transform(xyz))  # type: ignore[union-attr]
+        x = self._tensor(self._scaler.transform(xyz))  # type: ignore[union-attr]
         means, stds = [], []
         model.eval()
         likelihood.eval()
@@ -98,8 +102,8 @@ class GPOreModel:
                 dist = model(x[start : start + _PREDICT_CHUNK])
                 if include_noise:
                     dist = likelihood(dist)
-                means.append(dist.mean.numpy())
-                stds.append(dist.variance.clamp_min(1e-12).sqrt().numpy())
+                means.append(dist.mean.double().cpu().numpy())
+                stds.append(dist.variance.clamp_min(1e-12).sqrt().double().cpu().numpy())
         if not means:
             return np.empty(0), np.empty(0)
         return np.concatenate(means), np.concatenate(stds)
@@ -122,7 +126,7 @@ class GPOreModel:
 
     def hyperparameters(self) -> dict[str, float | list[float]]:
         model, likelihood = self._require_fitted()
-        scaled = model.covar_module.base_kernel.lengthscale.detach().numpy().ravel()
+        scaled = model.covar_module.base_kernel.lengthscale.detach().double().cpu().numpy().ravel()
         return {
             "mean": float(model.mean_module.constant.item()),
             "outputscale": float(model.covar_module.outputscale.item()),
@@ -142,14 +146,17 @@ class GPOreModel:
         if len(idx) > self._cfg.max_train:
             idx = np.sort(self._rng.choice(idx, self._cfg.max_train, replace=False))
             log.info("training cap: using %d of %d points", self._cfg.max_train, len(self._y))
-        x = torch.as_tensor(self._scaler.transform(self._xyz[idx]))  # type: ignore[union-attr]
-        return x, torch.as_tensor(self._y[idx])
+        x = self._tensor(self._scaler.transform(self._xyz[idx]))  # type: ignore[union-attr]
+        return x, self._tensor(self._y[idx])
+
+    def _tensor(self, a: np.ndarray) -> torch.Tensor:
+        return torch.as_tensor(a, dtype=self._dtype, device=self._device)
 
     def _train(self) -> None:
         start = time.perf_counter()
         x, y = self._training_tensors()
-        likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        model = _ExactGP(x, y, likelihood)
+        likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self._device, self._dtype)
+        model = _ExactGP(x, y, likelihood).to(self._device, self._dtype)
         model.mean_module.constant.data.fill_(float(y.mean()))
         model.covar_module.outputscale = float(y.var())
         model.train()
@@ -164,9 +171,19 @@ class GPOreModel:
         self._model, self._likelihood = model, likelihood
         self._steps_since_fit = 0
         log.info(
-            "gp fit n=%d loss=%.3f seconds=%.1f hyper=%s",
+            "gp fit n=%d device=%s dtype=%s loss=%.3f seconds=%.1f hyper=%s",
             len(y),
+            self._device,
+            self._dtype,
             loss.item(),
             time.perf_counter() - start,
             self.hyperparameters(),
         )
+
+
+def _resolve_device(name: str) -> torch.device:
+    if name == "auto":
+        name = "cuda" if torch.cuda.is_available() else "cpu"
+    if name == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("model.device is cuda but torch has no CUDA device")
+    return torch.device(name)

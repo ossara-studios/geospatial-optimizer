@@ -94,3 +94,22 @@ def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) ->
     boundary = run_boundary_sweep(cfg, tmp_path / "bt")
     assert set(boundary["strategy"]) == labels | {"adaptive-b0.5-g1"}
     assert set(boundary.loc[boundary["strategy"] == "adaptive-b0.5-g1", "gamma"]) == {1.0}
+
+
+def test_parallel_workers_match_serial(prepared_cfg: Config, tmp_path: Path) -> None:
+    cfg = prepared_cfg.model_copy(
+        update={
+            "backtest": prepared_cfg.backtest.model_copy(
+                update={
+                    "strategies": ["adaptive", "random"],
+                    "random_seeds": [1],
+                    "seed_sets": [SeedSet(name="a", method="spread", n_seed=5, seed=1)],
+                    "metre_budget": 300.0,
+                    "max_holes": 50,
+                }
+            )
+        }
+    )
+    serial = run_backtest(cfg, tmp_path / "serial")
+    parallel = run_backtest(cfg, tmp_path / "parallel", workers=2)
+    pd.testing.assert_frame_equal(serial, parallel)

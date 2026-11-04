@@ -125,6 +125,10 @@ class ModelConfig(_Strict):
     lr: float = Field(gt=0)
     refit_every: int = Field(ge=0)  # 0 = never re-tune after the seed fit
     cv_folds: int = Field(ge=2)
+    # "auto" picks CUDA when torch sees a GPU, else CPU. dtype "auto" is float32 on CUDA
+    # (consumer GPUs run float64 at ~1/64 speed) and float64 on CPU, the reference.
+    device: Literal["cpu", "cuda", "auto"] = "auto"
+    dtype: Literal["float64", "float32", "auto"] = "auto"
 
 
 class PlannerConfig(_Strict):

@@ -16,6 +16,31 @@ python3 -m venv .venv
 .venv/bin/pip install --no-deps -e .
 ```
 
+### NVIDIA GPU (Windows or Linux)
+The ore model uses the GPU automatically when PyTorch can see one (`model.device: auto`), in
+float32; otherwise it runs on the CPU in float64. The two agree on 99.97 % of ore calls.
+PyPI's Windows torch wheel is CPU-only, so after the steps above install the CUDA build of the
+same version. Pick the CUDA tag for your driver in the selector at https://pytorch.org; `cu128`
+is an example:
+```powershell
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.lock
+.venv\Scripts\pip install --force-reinstall --no-deps torch==2.15.0 --index-url https://download.pytorch.org/whl/cu128
+.venv\Scripts\pip install --no-deps -e .
+.venv\Scripts\python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+```
+The model logs `device=cuda` on each fit. Raw data is git-ignored: copy `data/raw/hillside/`
+(11 MB) from a machine that has it, then run `geoopt prepare`.
+
+### Backtest
+```bash
+.venv/bin/geoopt backtest --workers 3
+.venv/bin/geoopt backtest --beta-sweep --workers 3
+.venv/bin/geoopt backtest --boundary-sweep --workers 3
+```
+`--workers` runs independent runs in parallel processes. Results match a serial run exactly.
+On one 8 GB GPU, 2–3 workers is a sensible start.
+
 ## OPC UA round-trip (Phase 0)
 In one terminal, start the EAE emulator (it prompts y/n for approval; add `--auto-approve` to skip the prompt):
 ```bash

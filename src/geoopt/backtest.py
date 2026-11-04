@@ -9,17 +9,23 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import multiprocessing
+import os
 import time
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import torch
 from plotly.subplots import make_subplots
 from scipy.spatial import cKDTree
 
 from geoopt.config import AdaptiveVariant, Config, SeedSet
 from geoopt.data.prepare import prepare, prepared_paths
+from geoopt.logging_setup import configure_logging
 from geoopt.loop import IterationRecord
 from geoopt.metrics import classification, metres_to_target, on_metre_grid, ore_metres
 from geoopt.run import build_inprocess_loop
@@ -101,34 +107,72 @@ async def _one_run(
     return pd.DataFrame(rows)
 
 
-def run_backtest(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
+@dataclass(frozen=True)
+class _Job:
+    tag: str
+    cfg: Config
+    seed_set: str
+    strategy: str
+    rng_seed: int
+    run_dir: Path
+    label: str
+
+
+def _run_job(job: _Job) -> pd.DataFrame:
+    t0 = time.perf_counter()
+    df = asyncio.run(
+        _one_run(job.cfg, job.seed_set, job.strategy, job.rng_seed, job.run_dir, job.label)
+    )
+    last = df.iloc[-1]
+    log.info(
+        "%s seed_set=%s strategy=%s rng=%s holes=%d metres=%.0f ore_m=%.0f "
+        "f1_undrilled=%.3f f1_near=%.3f seconds=%.0f",
+        job.tag,
+        job.seed_set,
+        job.label or job.strategy,
+        job.rng_seed,
+        last["holes"],
+        last["cum_metres"],
+        last["ore_m"],
+        last["f1_undrilled"],
+        last["f1_near"],
+        time.perf_counter() - t0,
+    )
+    return df
+
+
+def _init_worker(threads: int, log_level: str) -> None:
+    torch.set_num_threads(threads)
+    configure_logging(log_level)
+
+
+def _execute(jobs: list[_Job], workers: int, log_level: str) -> list[pd.DataFrame]:
+    """Run independent backtest runs, in `workers` processes when > 1 (results keep job order)."""
+    if workers <= 1:
+        return [_run_job(j) for j in jobs]
+    threads = max(1, (os.cpu_count() or 1) // workers)
+    log.info("running %d runs on %d workers, %d torch threads each", len(jobs), workers, threads)
+    ctx = multiprocessing.get_context("spawn")  # CUDA can't be forked
+    with ProcessPoolExecutor(
+        workers, mp_context=ctx, initializer=_init_worker, initargs=(threads, log_level)
+    ) as pool:
+        return list(pool.map(_run_job, jobs))
+
+
+def run_backtest(cfg: Config, out_dir: Path | None = None, workers: int = 1) -> pd.DataFrame:
     bt = cfg.backtest
     out_dir = out_dir or bt.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    frames = []
+    jobs = []
     for ss in bt.seed_sets:
         ss_cfg = _seed_set_cfg(cfg, ss, out_dir)
         prepare(ss_cfg)
         for strategy in bt.strategies:
             seeds = bt.random_seeds if strategy == "random" else [cfg.seed]
             for rng_seed in seeds:
-                t0 = time.perf_counter()
                 run_dir = out_dir / "runs" / ss.name / f"{strategy}-{rng_seed}"
-                df = asyncio.run(_one_run(ss_cfg, ss.name, strategy, rng_seed, run_dir))
-                frames.append(df)
-                last = df.iloc[-1]
-                log.info(
-                    "backtest seed_set=%s strategy=%s rng=%s holes=%d metres=%.0f ore_m=%.0f "
-                    "f1_undrilled=%.3f seconds=%.0f",
-                    ss.name,
-                    strategy,
-                    rng_seed,
-                    last["holes"],
-                    last["cum_metres"],
-                    last["ore_m"],
-                    last["f1_undrilled"],
-                    time.perf_counter() - t0,
-                )
+                jobs.append(_Job("backtest", ss_cfg, ss.name, strategy, rng_seed, run_dir, ""))
+    frames = _execute(jobs, workers, cfg.log_level)
     results = pd.concat(frames, ignore_index=True)
     results.to_parquet(out_dir / "results.parquet", index=False)
     summary = summarize_backtest(results, cfg)
@@ -137,17 +181,16 @@ def run_backtest(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
     return results
 
 
-def run_beta_sweep(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
+def run_beta_sweep(cfg: Config, out_dir: Path | None = None, workers: int = 1) -> pd.DataFrame:
     """Adaptive at each `backtest.beta_sweep` beta (gamma 0)."""
     variants = [AdaptiveVariant(beta=b) for b in cfg.backtest.beta_sweep]
-    return _run_variants(cfg, variants, "beta_sweep", out_dir)
+    return _run_variants(cfg, variants, "beta_sweep", out_dir, workers=workers)
 
 
-def run_boundary_sweep(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
+def run_boundary_sweep(cfg: Config, out_dir: Path | None = None, workers: int = 1) -> pd.DataFrame:
     """Adaptive at each `backtest.boundary_sweep` (beta, gamma); joins the beta sweep too."""
-    return _run_variants(
-        cfg, cfg.backtest.boundary_sweep, "boundary_sweep", out_dir, ["beta_sweep"]
-    )
+    variants = cfg.backtest.boundary_sweep
+    return _run_variants(cfg, variants, "boundary_sweep", out_dir, ["beta_sweep"], workers)
 
 
 def _run_variants(
@@ -156,6 +199,7 @@ def _run_variants(
     name: str,
     out_dir: Path | None,
     join: list[str] | None = None,
+    workers: int = 1,
 ) -> pd.DataFrame:
     """Adaptive variants on the main backtest's seed sets and budget, in `<out_dir>/<name>/`.
 
@@ -166,7 +210,7 @@ def _run_variants(
     out_dir = out_dir or bt.out_dir
     sweep_dir = out_dir / name
     sweep_dir.mkdir(parents=True, exist_ok=True)
-    frames = []
+    jobs = []
     for ss in bt.seed_sets:
         ss_cfg = _seed_set_cfg(cfg, ss, out_dir)
         prepare(ss_cfg)
@@ -176,24 +220,9 @@ def _run_variants(
                     "planner": ss_cfg.planner.model_copy(update={"beta": v.beta, "gamma": v.gamma})
                 }
             )
-            t0 = time.perf_counter()
             run_dir = sweep_dir / "runs" / ss.name / v.label
-            df = asyncio.run(_one_run(v_cfg, ss.name, "adaptive", cfg.seed, run_dir, v.label))
-            frames.append(df)
-            last = df.iloc[-1]
-            log.info(
-                "%s seed_set=%s variant=%s holes=%d metres=%.0f ore_m=%.0f "
-                "f1_undrilled=%.3f f1_near=%.3f seconds=%.0f",
-                name,
-                ss.name,
-                v.label,
-                last["holes"],
-                last["cum_metres"],
-                last["ore_m"],
-                last["f1_undrilled"],
-                last["f1_near"],
-                time.perf_counter() - t0,
-            )
+            jobs.append(_Job(name, v_cfg, ss.name, "adaptive", cfg.seed, run_dir, v.label))
+    frames = _execute(jobs, workers, cfg.log_level)
     results = pd.concat(frames, ignore_index=True)
     others = [out_dir / "results.parquet"] + [out_dir / j / "results.parquet" for j in join or []]
     for path in others:

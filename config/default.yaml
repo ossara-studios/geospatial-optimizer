@@ -54,6 +54,8 @@ model:
   lr: 0.05
   refit_every: 10     # re-tune hyperparameters every k conditioning steps
   cv_folds: 5
+  device: auto        # auto = NVIDIA GPU (CUDA) when torch sees one, else CPU; or cpu | cuda
+  dtype: auto         # auto = float32 on GPU, float64 on CPU; or float32 | float64
 
 planner:
   beta: 0.5             # exploration weight (unit-free when standardize is true)
