@@ -112,6 +112,7 @@ class CompositeConfig(_Strict):
 class SplitConfig(_Strict):
     n_seed: int = Field(gt=0)
     method: Literal["earliest", "spread"]
+    seed: int | None = None  # RNG for the spread split; null = top-level seed
 
 
 class ModelConfig(_Strict):
@@ -150,6 +151,33 @@ class LoopConfig(_Strict):
     live_lab_dir: Path
 
 
+class SeedSet(_Strict):
+    name: str
+    method: Literal["earliest", "spread"]
+    n_seed: int = Field(gt=0)
+    seed: int = 0
+
+
+class BacktestConfig(_Strict):
+    out_dir: Path
+    strategies: list[Literal["adaptive", "grid", "historical", "random"]]
+    random_seeds: list[int]
+    seed_sets: list[SeedSet]
+    metre_budget: float = Field(gt=0)
+    max_holes: int = Field(gt=0)
+    ore_threshold: float = Field(0.5, gt=0, lt=1)  # classify ore when P(ore) > this
+    f1_target: float = Field(gt=0, le=1)  # "metres to target" uses this delineation F1
+
+
+class EnvFactors(_Strict):
+    """ESTIMATES used to translate metres/holes avoided into environmental terms."""
+
+    source_note: str
+    water_l_per_m: float = Field(ge=0)
+    diesel_l_per_m: float = Field(ge=0)
+    pad_area_m2_per_hole: float = Field(ge=0)
+
+
 class Config(_Strict):
     seed: int
     log_level: str = "INFO"
@@ -160,6 +188,8 @@ class Config(_Strict):
     split: SplitConfig
     model: ModelConfig
     planner: PlannerConfig
+    backtest: BacktestConfig
+    env: EnvFactors
     opcua: OpcUaConfig
     limits: Limits
     nodes: NodeMap
@@ -176,6 +206,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     base = path.parent
     raw["limits"] = _read_yaml(base / raw.pop("limits_file"))
     raw["nodes"] = _read_yaml(base / raw.pop("nodes_file"))
+    raw["env"] = _read_yaml(base / raw.pop("env_file"))
+    raw["backtest"]["out_dir"] = (base / raw["backtest"]["out_dir"]).resolve()
     for key in ("raw_dir", "processed_dir"):
         raw["data"][key] = (base / raw["data"][key]).resolve()
     for key in ("runs_dir", "live_lab_dir"):

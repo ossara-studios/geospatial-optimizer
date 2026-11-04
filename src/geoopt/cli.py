@@ -9,6 +9,7 @@ from typing import Annotated
 
 import typer
 
+from geoopt.backtest import run_backtest
 from geoopt.config import DEFAULT_CONFIG_PATH, load_config
 from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
@@ -60,6 +61,17 @@ def run_loop(
     else:
         raise typer.BadParameter(f"unknown bridge {bridge!r}")
     typer.echo(summarize(records))
+
+
+@app.command()
+def backtest(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+) -> None:
+    """Run every strategy over every seed set with the same metre budget."""
+    cfg = load_config(config)
+    configure_logging(cfg.log_level)
+    run_backtest(cfg)
+    typer.echo(f"wrote {cfg.backtest.out_dir}")
 
 
 @app.command("rig-sim")

@@ -45,7 +45,7 @@ def prepared_paths(processed_dir: Path) -> PreparedPaths:
 
 
 def prepare_tables(tables: DrillholeTables, cfg: Config) -> PreparedPaths:
-    rng = np.random.default_rng(cfg.seed)
+    rng = np.random.default_rng(cfg.seed if cfg.split.seed is None else cfg.split.seed)
     comps = composite(tables.assays, cfg.composite.length_m, cfg.composite.min_coverage)
     comps = desurvey(tables.collars, tables.surveys, comps)
 

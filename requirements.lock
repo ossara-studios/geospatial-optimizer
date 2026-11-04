@@ -23,6 +23,7 @@ networkx==3.7
 numpy==2.5.4
 packaging==26.3
 pandas==3.1.1
+plotly==7.1.0
 pluggy==1.7.0
 pyarrow==26.0.1
 pycparser==3.12

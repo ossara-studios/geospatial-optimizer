@@ -1,0 +1,7 @@
+# ESTIMATES ONLY: placeholder per-metre / per-hole factors for translating drilling avoided
+# into environmental terms. Label every number derived from these as an estimate, and replace
+# them with sourced values before quoting them externally.
+source_note: "Placeholder estimates, not sourced; replace before external use."
+water_l_per_m: 100.0
+diesel_l_per_m: 3.0
+pad_area_m2_per_hole: 200.0

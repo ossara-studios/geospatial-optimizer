@@ -4,6 +4,7 @@ log_level: INFO
 # Paths are relative to this file's directory.
 limits_file: limits.yaml
 nodes_file: opcua_nodes.yaml
+env_file: env_factors.yaml
 
 data:
   raw_dir: ../data/raw
@@ -60,6 +61,19 @@ planner:
   min_spacing_m: 25.0   # soft penalty for collars closer than this to drilled holes
   spacing_weight: 1.0
   grid_spacing_m: 100.0
+
+backtest:
+  out_dir: ../runs/backtest
+  strategies: [adaptive, grid, historical, random]
+  random_seeds: [1, 2, 3, 4, 5]
+  seed_sets:
+    - {name: earliest60, method: earliest, n_seed: 60}
+    - {name: spread60-a, method: spread, n_seed: 60, seed: 1}
+    - {name: spread60-b, method: spread, n_seed: 60, seed: 2}
+  metre_budget: 15000.0   # same metres for every strategy
+  max_holes: 300
+  ore_threshold: 0.5
+  f1_target: 0.6
 
 opcua:
   # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).

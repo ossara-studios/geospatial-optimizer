@@ -74,7 +74,7 @@ class DecisionLoop:
         self._run_dir = run_dir
         self._lab_dir = lab_dir
         self._grid = eval_grid(points, cfg.eval_grid) if write_grid else None
-        self._on_iteration = on_iteration
+        self.on_iteration = on_iteration
         self.state = PlannerState(
             candidates=candidates,
             points=points,
@@ -85,6 +85,14 @@ class DecisionLoop:
         self.records: list[IterationRecord] = []
         self._req_id = 0
         self._metres = 0.0
+
+    @property
+    def model(self) -> OreModel:
+        return self._model
+
+    @property
+    def drilled_holes(self) -> list[int]:
+        return [r.hole_idx for r in self.records if r.metres_drilled > 0]
 
     async def run(self) -> list[IterationRecord]:
         self._run_dir.mkdir(parents=True, exist_ok=True)
@@ -98,8 +106,8 @@ class DecisionLoop:
             record = await self._step(iteration)
             self.records.append(record)
             self._write(record)
-            if self._on_iteration:
-                self._on_iteration(record)
+            if self.on_iteration:
+                self.on_iteration(record)
             if record.metres_drilled > 0:
                 drilled += 1
         log.info("loop done iterations=%d holes=%d metres=%.0f", iteration, drilled, self._metres)
