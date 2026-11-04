@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class CheckStatus(IntEnum):
     ACCEPTED = 1
@@ -31,3 +33,28 @@ class CheckResult:
     status: CheckStatus
     reason: Reason
     depth: float
+
+
+class RecommendationMsg(BaseModel):
+    """Everything the planner sends to EAE for one request (all scalars)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    req_id: int = Field(gt=0)
+    hole_idx: int = Field(ge=0)
+    collar_x: float
+    collar_y: float
+    collar_z: float
+    azimuth: float
+    dip: float
+    depth: float = Field(gt=0)
+    prob_ore: float
+    exp_ore_m: float
+    score: float
+
+
+@dataclass(frozen=True)
+class Completion:
+    req_id: int
+    hole_idx: int
+    metres_drilled: float

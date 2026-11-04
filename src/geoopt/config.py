@@ -29,8 +29,38 @@ class OpcUaConfig(_Strict):
     timeouts: Timeouts = Timeouts()
 
 
+class Bounds(_Strict):
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+
+
+class RectZone(_Strict):
+    kind: Literal["rect"]
+    name: str
+    x_min: float
+    x_max: float
+    y_min: float
+    y_max: float
+
+
+class CircleZone(_Strict):
+    kind: Literal["circle"]
+    name: str
+    x: float
+    y: float
+    radius: float = Field(gt=0)
+
+
 class Limits(_Strict):
+    """Mirrored by the EAE limit-check FB. Coordinates are local metres (see meta.json)."""
+
     max_depth_m: float = Field(gt=0)
+    site_bounds: Bounds | None = None
+    no_go_zones: list[RectZone | CircleZone] = []
+    dip_range: tuple[float, float] = (-90.0, 0.0)  # degrees, negative = down
+    azimuth_range: tuple[float, float] = (0.0, 360.0)
 
 
 class NodeSpec(_Strict):
@@ -104,10 +134,19 @@ class PlannerConfig(_Strict):
     grid_spacing_m: float = Field(gt=0)  # GridStrategy node spacing
 
 
+class LoopConfig(_Strict):
+    runs_dir: Path
+    max_holes: int = Field(gt=0)
+    max_metres: float | None = Field(None, gt=0)
+    # Fixed 3D evaluation grid (nx, ny, nz) written each iteration for the visualizer.
+    eval_grid: tuple[int, int, int] = (30, 30, 12)
+
+
 class Config(_Strict):
     seed: int
     log_level: str = "INFO"
     data: DataConfig
+    loop: LoopConfig
     composite: CompositeConfig
     split: SplitConfig
     model: ModelConfig
@@ -130,4 +169,5 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     raw["nodes"] = _read_yaml(base / raw.pop("nodes_file"))
     for key in ("raw_dir", "processed_dir"):
         raw["data"][key] = (base / raw["data"][key]).resolve()
+    raw["loop"]["runs_dir"] = (base / raw["loop"]["runs_dir"]).resolve()
     return Config.model_validate(raw)

@@ -14,6 +14,7 @@ from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
 from geoopt.emulator.server import auto_approve, cli_approve, serve
 from geoopt.logging_setup import configure_logging
+from geoopt.run import run_inprocess, summarize
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -36,6 +37,26 @@ def prepare(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"wrote {paths.meta.parent}")
+
+
+@app.command("run-loop")
+def run_loop(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+    strategy: Annotated[
+        str, typer.Option(help="adaptive | random | grid | historical")
+    ] = "adaptive",
+    bridge: Annotated[str, typer.Option(help="inprocess (opcua comes in Phase 7)")] = "inprocess",
+    max_holes: Annotated[int | None, typer.Option(help="Override loop.max_holes.")] = None,
+) -> None:
+    """Run the decision loop end to end."""
+    cfg = load_config(config)
+    configure_logging(cfg.log_level)
+    if max_holes is not None:
+        cfg = cfg.model_copy(update={"loop": cfg.loop.model_copy(update={"max_holes": max_holes})})
+    if bridge != "inprocess":
+        raise typer.BadParameter("only --bridge inprocess is implemented so far")
+    records = asyncio.run(run_inprocess(cfg, strategy))
+    typer.echo(summarize(records))
 
 
 @app.command()

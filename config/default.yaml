@@ -19,6 +19,12 @@ data:
   below_detection_factor: 0.5
   origin: null
 
+loop:
+  runs_dir: ../runs
+  max_holes: 20
+  max_metres: null      # stop early once this many metres are drilled
+  eval_grid: [30, 30, 12]
+
 composite:
   length_m: 10.0
   min_coverage: 0.5
