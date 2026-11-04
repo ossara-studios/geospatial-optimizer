@@ -160,6 +160,61 @@ def summarize_backtest(results: pd.DataFrame, cfg: Config) -> dict:
         )
         out["strategies"][strategy] = entry
     out["environment_estimates"] = _env_estimates(out, cfg)
+    out["discovery_equivalent"] = _discovery_equivalent(results, cfg)
+    return out
+
+
+def _discovery_equivalent(results: pd.DataFrame, cfg: Config) -> dict:
+    """Metres adaptive needed to match each baseline's ore metres at the full budget.
+
+    Per seed set, the target is the baseline's mean ore metres at the budget (mean over RNG
+    seeds for random); savings are averaged across seed sets. Environmental figures are
+    ESTIMATES from the placeholder factors.
+    """
+    if "adaptive" not in set(results["strategy"]):
+        return {}
+    budget = cfg.backtest.metre_budget
+    env = cfg.env
+    out: dict = {"label": "ESTIMATE", "factors_note": env.source_note, "vs": {}}
+    for baseline in sorted(set(results["strategy"]) - {"adaptive"}):
+        per_set = []
+        for seed_set, g in results.groupby("seed_set"):
+            base = [
+                r.sort_values("iteration")
+                for _, r in g[g["strategy"] == baseline].groupby("rng_seed")
+            ]
+            adapt = g[g["strategy"] == "adaptive"].sort_values("iteration")
+            if not base or adapt.empty:
+                continue
+            target = float(
+                np.nanmean([on_metre_grid(r, "ore_m", np.array([budget]))[0] for r in base])
+            )
+            base_holes = float(
+                np.mean([r.loc[r["cum_metres"] <= budget, "holes"].max() for r in base])
+            )
+            metres = metres_to_target(adapt, "ore_m", target)
+            holes = (
+                float(adapt.loc[adapt["cum_metres"] >= metres, "holes"].iloc[0])
+                if np.isfinite(metres)
+                else float("nan")
+            )
+            per_set.append((seed_set, target, metres, holes, base_holes))
+        if not per_set:
+            continue
+        metres = np.array([m for _, _, m, _, _ in per_set])
+        holes_saved = np.array([b - h for _, _, _, h, b in per_set])
+        saved = budget - metres
+        out["vs"][baseline] = {
+            "baseline_ore_m": {s: t for s, t, _, _, _ in per_set},
+            "adaptive_metres_to_match": {s: m for s, _, m, _, _ in per_set},
+            "metres_saved_mean": float(np.nanmean(saved)),
+            "metres_saved_min": float(np.nanmin(saved)),
+            "metres_saved_max": float(np.nanmax(saved)),
+            "holes_saved_mean": float(np.nanmean(holes_saved)),
+            "water_l_estimate": float(np.nanmean(saved)) * env.water_l_per_m,
+            "diesel_l_estimate": float(np.nanmean(saved)) * env.diesel_l_per_m,
+            "pad_area_m2_estimate": float(np.nanmean(holes_saved)) * env.pad_area_m2_per_hole,
+        }
     return out
 
 

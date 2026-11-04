@@ -60,4 +60,6 @@ def test_backtest_same_budget_for_every_strategy(prepared_cfg: Config, tmp_path:
     assert (starts == 1).all()
     summary = json.loads((tmp_path / "bt" / "summary.json").read_text())
     assert set(summary["strategies"]) == {"adaptive", "grid", "random"}
+    assert set(summary["discovery_equivalent"]["vs"]) == {"grid", "random"}
+    assert summary["discovery_equivalent"]["label"] == "ESTIMATE"
     assert (tmp_path / "bt" / "backtest.html").exists()
