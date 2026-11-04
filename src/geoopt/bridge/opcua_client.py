@@ -11,7 +11,6 @@ import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from typing import Any
 
 from asyncua import Client, Node, ua
@@ -125,22 +124,3 @@ async def await_approval(session: OpcUaSession, req_id: int, timeout_s: float | 
     decision = Decision(await session.read("Appr.Decision"))
     log.info("approval req_id=%s decision=%s", req_id, decision.name)
     return decision
-
-
-@dataclass(frozen=True)
-class RoundTripResult:
-    req_id: int
-    check: CheckResult
-    decision: Decision | None  # None when the check rejected the request
-
-
-async def roundtrip(cfg: Config, depth: float) -> RoundTripResult:
-    """Send one recommendation and wait for the check and (if not rejected) the approval."""
-    async with connect(cfg) as session:
-        req_id = await next_req_id(session)
-        await send_recommendation(session, req_id, depth)
-        check = await await_check(session, req_id, cfg.opcua.timeouts.check_s)
-        if check.status is CheckStatus.REJECTED:
-            return RoundTripResult(req_id, check, None)
-        decision = await await_approval(session, req_id, cfg.opcua.timeouts.approval_s)
-        return RoundTripResult(req_id, check, decision)

@@ -8,6 +8,10 @@ from geoopt.protocol import CheckResult, Completion, Decision, RecommendationMsg
 
 
 class Bridge(Protocol):
+    async def next_req_id(self) -> int:
+        """First ReqId this session may use (above anything already on the OT side)."""
+        ...
+
     async def submit(self, rec: RecommendationMsg) -> CheckResult:
         """Send a recommendation and wait for EAE's limit check."""
         ...

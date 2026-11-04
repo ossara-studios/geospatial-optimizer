@@ -14,7 +14,7 @@ from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
 from geoopt.emulator.server import auto_approve, cli_approve, serve
 from geoopt.logging_setup import configure_logging
-from geoopt.run import run_inprocess, summarize
+from geoopt.run import run_inprocess, run_opcua, run_rig_sim, summarize
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -45,7 +45,7 @@ def run_loop(
     strategy: Annotated[
         str, typer.Option(help="adaptive | random | grid | historical")
     ] = "adaptive",
-    bridge: Annotated[str, typer.Option(help="inprocess (opcua comes in Phase 7)")] = "inprocess",
+    bridge: Annotated[str, typer.Option(help="inprocess | opcua")] = "inprocess",
     max_holes: Annotated[int | None, typer.Option(help="Override loop.max_holes.")] = None,
 ) -> None:
     """Run the decision loop end to end."""
@@ -53,10 +53,24 @@ def run_loop(
     configure_logging(cfg.log_level)
     if max_holes is not None:
         cfg = cfg.model_copy(update={"loop": cfg.loop.model_copy(update={"max_holes": max_holes})})
-    if bridge != "inprocess":
-        raise typer.BadParameter("only --bridge inprocess is implemented so far")
-    records = asyncio.run(run_inprocess(cfg, strategy))
+    if bridge == "inprocess":
+        records = asyncio.run(run_inprocess(cfg, strategy))
+    elif bridge == "opcua":
+        records = asyncio.run(run_opcua(cfg, strategy))
+    else:
+        raise typer.BadParameter(f"unknown bridge {bridge!r}")
     typer.echo(summarize(records))
+
+
+@app.command("rig-sim")
+def rig_sim(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+) -> None:
+    """Run the rig + lab simulator as an OPC UA client of EAE (or the emulator)."""
+    cfg = load_config(config)
+    configure_logging(cfg.log_level)
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(run_rig_sim(cfg))
 
 
 @app.command()

@@ -15,8 +15,8 @@ from asyncua import Node, Server, ua
 
 from geoopt.bridge.opcua_client import VARIANT_TYPES
 from geoopt.config import Config
-from geoopt.limits import check_depth
-from geoopt.protocol import CheckResult, CheckStatus, Decision
+from geoopt.limits import check_recommendation
+from geoopt.protocol import CheckResult, CheckStatus, Decision, RigState
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ class Emulator:
         self._nodes: dict[str, tuple[Node, ua.VariantType]] = {}
         self._last_req_id = 0
         self._last_stale: int | None = None
+        self._dispatched: int | None = None  # ReqId sent to the rig, awaiting completion
 
     async def start(self) -> None:
         await self._server.init()
@@ -78,7 +79,8 @@ class Emulator:
         await node.write_value(ua.Variant(value, vt))
 
     async def process_once(self) -> bool:
-        """Handle a pending recommendation, if any. Returns True if one was handled."""
+        """One scan: forward a rig completion, then handle a new recommendation, if any."""
+        await self._forward_completion()
         req_id = await self._read("Rec.ReqId")
         if req_id == self._last_req_id:
             return False
@@ -89,7 +91,14 @@ class Emulator:
             return False
         self._last_req_id = req_id
 
-        result = check_depth(await self._read("Rec.Depth"), self._cfg.limits)
+        result = check_recommendation(
+            x=await self._read("Rec.CollarX"),
+            y=await self._read("Rec.CollarY"),
+            azimuth=await self._read("Rec.Azimuth"),
+            dip=await self._read("Rec.Dip"),
+            depth=await self._read("Rec.Depth"),
+            limits=self._cfg.limits,
+        )
         await self._write("Chk.Status", int(result.status))
         await self._write("Chk.Reason", int(result.reason))
         await self._write("Chk.Depth", result.depth)
@@ -108,7 +117,27 @@ class Emulator:
         await self._write("Appr.Decision", int(decision))
         await self._write("Appr.ReqId", req_id)
         log.info("approval req_id=%s decision=%s", req_id, decision.name)
+        if decision is Decision.APPROVED:
+            await self._write("Disp.HoleIdx", await self._read("Rec.HoleIdx"))
+            await self._write("Disp.Depth", result.depth)
+            await self._write("Disp.ReqId", req_id)
+            self._dispatched = req_id
+            log.info("dispatched req_id=%s depth=%.1f", req_id, result.depth)
         return True
+
+    async def _forward_completion(self) -> None:
+        if self._dispatched is None:
+            return
+        state = await self._read("Rig.State")
+        if state == RigState.FAULT:
+            log.error("rig fault on req_id=%s", self._dispatched)
+            return
+        if state != RigState.COMPLETE or await self._read("Rig.ReqId") != self._dispatched:
+            return
+        await self._write("Done.MetresDrilled", await self._read("Rig.DepthDrilled"))
+        await self._write("Done.ReqId", self._dispatched)
+        log.info("completion forwarded req_id=%s", self._dispatched)
+        self._dispatched = None
 
     async def run(self) -> None:
         while True:

@@ -7,7 +7,8 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from geoopt.bridge.opcua_client import connect, roundtrip, send_recommendation
+from geoopt.bridge.opcua import roundtrip
+from geoopt.bridge.opcua_client import connect, send_recommendation
 from geoopt.config import Config
 from geoopt.emulator.server import Approver, Emulator, auto_approve
 from geoopt.protocol import CheckResult, CheckStatus, Decision, Reason

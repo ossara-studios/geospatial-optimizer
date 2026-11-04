@@ -24,13 +24,23 @@ from scipy.spatial import cKDTree
 log = logging.getLogger("build_hillside")
 
 EXCLUDED_METHODS = ("Aircore",)  # shallow, low-quality samples
+# Hillside deposit area (GDA2020 MGA53): the dense drilling, without regional scout holes.
+AOI = {"e_min": 762_500, "e_max": 764_700, "n_min": 6_172_600, "n_max": 6_175_800}
 ELEVATION_NEIGHBOURS = 5
 
 
 def build_collars(raw: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     keep = ~raw["DRILLING_METHODS"].fillna("").str.contains("|".join(EXCLUDED_METHODS))
-    c = raw[keep].copy()
-    report = {"holes_in": len(raw), "holes_excluded_aircore": int((~keep).sum())}
+    in_aoi = raw["EASTING_GDA2020"].between(AOI["e_min"], AOI["e_max"]) & raw[
+        "NORTHING_GDA2020"
+    ].between(AOI["n_min"], AOI["n_max"])
+    c = raw[keep & in_aoi].copy()
+    report = {
+        "holes_in": len(raw),
+        "holes_excluded_aircore": int((~keep).sum()),
+        "holes_excluded_outside_deposit_area": int((keep & ~in_aoi).sum()),
+        "deposit_area_gda2020_mga53": AOI,
+    }
 
     # Fill missing collar elevations from the nearest surveyed collars (flat terrain).
     missing = c["ELEVATION_M"].isna().to_numpy()

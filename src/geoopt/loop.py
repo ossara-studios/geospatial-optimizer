@@ -88,6 +88,7 @@ class DecisionLoop:
 
     async def run(self) -> list[IterationRecord]:
         self._run_dir.mkdir(parents=True, exist_ok=True)
+        self._req_id = await self._bridge.next_req_id() - 1
         drilled = 0
         iteration = 0
         while drilled < self._cfg.max_holes and self.state.available:

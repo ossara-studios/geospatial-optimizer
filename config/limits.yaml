@@ -1,3 +1,13 @@
 # Shared with the EAE project: the EAE limit-check FB must use the same values.
-# Phase 0 only implements depth clipping; bounds, no-go zones, dip/azimuth come in Phase 7.
-max_depth_m: 500.0
+# Local metres relative to data.origin (SW corner of the Hillside deposit area, MGA53).
+# Checks: bounds / no-go / dip / azimuth REJECT; depth over max CLIPS.
+# All limits and zones are ILLUSTRATIVE (made up for the demo), not real site constraints.
+
+max_depth_m: 500.0          # illustrative rig capacity
+site_bounds: {x_min: 0.0, x_max: 2200.0, y_min: 0.0, y_max: 3200.0}
+dip_range: [-90.0, -50.0]   # degrees, negative = down
+azimuth_range: [0.0, 360.0]
+
+no_go_zones:
+  - {kind: rect, name: "Illustrative drainage buffer", x_min: 1900.0, x_max: 2200.0, y_min: 0.0, y_max: 900.0}
+  - {kind: circle, name: "Illustrative heritage site", x: 600.0, y: 2600.0, radius: 150.0}

@@ -23,6 +23,13 @@ class Reason(IntEnum):
     AZIMUTH_OUT_OF_RANGE = 5
 
 
+class RigState(IntEnum):
+    IDLE = 0
+    DRILLING = 1
+    COMPLETE = 2
+    FAULT = 9
+
+
 class Decision(IntEnum):
     APPROVED = 1
     DENIED = 2

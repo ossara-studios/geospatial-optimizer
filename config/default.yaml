@@ -24,13 +24,18 @@ data:
   cu_unit: pct                   # build script converts SARIG ppm to %
   dip_convention: negative_down  # SARIG INCLINATION: -60 = 60 deg below horizontal
   below_detection_factor: 0.5
-  origin: null
+  origin: [762500.0, 6172600.0, 0.0]   # SW corner of the Hillside deposit area (MGA53)
 
 loop:
   runs_dir: ../runs
   max_holes: 20
   max_metres: null      # stop early once this many metres are drilled
   eval_grid: [30, 30, 12]
+  live_lab_dir: ../runs/live_lab   # OPC UA mode: rig-sim writes, planner reads
+
+rig:
+  metres_per_second: 60.0   # DEMO speed so a hole "drills" in seconds
+  telemetry_period_s: 0.5
 
 composite:
   length_m: 10.0
@@ -68,3 +73,4 @@ opcua:
     check_s: 15.0
     # null = wait for the operator indefinitely (logging while waiting).
     approval_s: null
+    drill_s: null

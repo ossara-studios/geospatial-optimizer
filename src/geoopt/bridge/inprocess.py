@@ -20,6 +20,9 @@ class InProcessBridge:
         self._lab = lab
         self._pending: dict[int, tuple[RecommendationMsg, CheckResult]] = {}
 
+    async def next_req_id(self) -> int:
+        return 1
+
     async def submit(self, rec: RecommendationMsg) -> CheckResult:
         check = check_recommendation(
             rec.collar_x, rec.collar_y, rec.azimuth, rec.dip, rec.depth, self._limits

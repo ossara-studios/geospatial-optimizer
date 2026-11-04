@@ -19,6 +19,7 @@ class Timeouts(_Strict):
     connect_s: float = Field(10.0, gt=0)
     check_s: float = Field(15.0, gt=0)
     approval_s: float | None = Field(None, gt=0)
+    drill_s: float | None = Field(None, gt=0)  # wait for Done.ReqId; null = indefinitely
 
 
 class OpcUaConfig(_Strict):
@@ -134,12 +135,19 @@ class PlannerConfig(_Strict):
     grid_spacing_m: float = Field(gt=0)  # GridStrategy node spacing
 
 
+class RigConfig(_Strict):
+    metres_per_second: float = Field(gt=0)  # demo drilling speed, not a real rate
+    telemetry_period_s: float = Field(gt=0)
+
+
 class LoopConfig(_Strict):
     runs_dir: Path
     max_holes: int = Field(gt=0)
     max_metres: float | None = Field(None, gt=0)
     # Fixed 3D evaluation grid (nx, ny, nz) written each iteration for the visualizer.
     eval_grid: tuple[int, int, int] = (30, 30, 12)
+    # Lab drop folder shared by the rig simulator and the planner in OPC UA mode.
+    live_lab_dir: Path
 
 
 class Config(_Strict):
@@ -147,6 +155,7 @@ class Config(_Strict):
     log_level: str = "INFO"
     data: DataConfig
     loop: LoopConfig
+    rig: RigConfig
     composite: CompositeConfig
     split: SplitConfig
     model: ModelConfig
@@ -169,5 +178,6 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
     raw["nodes"] = _read_yaml(base / raw.pop("nodes_file"))
     for key in ("raw_dir", "processed_dir"):
         raw["data"][key] = (base / raw["data"][key]).resolve()
-    raw["loop"]["runs_dir"] = (base / raw["loop"]["runs_dir"]).resolve()
+    for key in ("runs_dir", "live_lab_dir"):
+        raw["loop"][key] = (base / raw["loop"][key]).resolve()
     return Config.model_validate(raw)

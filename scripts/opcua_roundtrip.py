@@ -13,7 +13,7 @@ import asyncio
 import sys
 from pathlib import Path
 
-from geoopt.bridge.opcua_client import roundtrip
+from geoopt.bridge.opcua import roundtrip
 from geoopt.config import DEFAULT_CONFIG_PATH, load_config
 from geoopt.logging_setup import configure_logging
 
