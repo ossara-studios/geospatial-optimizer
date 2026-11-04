@@ -1,0 +1,14 @@
+# Node map: the shared contract with the EAE project (see docs/eae_contract.md).
+# Each node has either `id` (string identifier inside `namespace_uri`) or a full `node_id`
+# (e.g. "ns=2;s=GeoOpt.Rec.ReqId") once the EAE project exposes real ones.
+namespace_uri: urn:ossara:geoopt
+
+nodes:
+  Rec.ReqId:     {id: Rec.ReqId,     type: UInt32}
+  Rec.Depth:     {id: Rec.Depth,     type: Double}
+  Chk.ReqId:     {id: Chk.ReqId,     type: UInt32}
+  Chk.Status:    {id: Chk.Status,    type: Int16}
+  Chk.Reason:    {id: Chk.Reason,    type: Int16}
+  Chk.Depth:     {id: Chk.Depth,     type: Double}
+  Appr.ReqId:    {id: Appr.ReqId,    type: UInt32}
+  Appr.Decision: {id: Appr.Decision, type: Int16}

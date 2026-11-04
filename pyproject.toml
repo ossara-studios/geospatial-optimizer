@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "geoopt"
+version = "0.1.0"
+description = "Adaptive exploration drillhole planner with an EAE (IEC 61499) OPC UA loop"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncua>=1.1",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+geoopt = "geoopt.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/geoopt"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["opcua: tests that start a local OPC UA server"]

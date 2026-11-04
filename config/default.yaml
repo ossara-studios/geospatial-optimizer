@@ -1,0 +1,19 @@
+seed: 42
+log_level: INFO
+
+# Paths are relative to this file's directory.
+limits_file: limits.yaml
+nodes_file: opcua_nodes.yaml
+
+opcua:
+  # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).
+  endpoint: opc.tcp://127.0.0.1:4840/geoopt/
+  # Local dev uses no security. Production would use signed/encrypted OPC UA across the IT/OT firewall.
+  security: none
+  poll_interval_s: 0.2
+  log_wait_every_s: 10.0
+  timeouts:
+    connect_s: 10.0
+    check_s: 15.0
+    # null = wait for the operator indefinitely (logging while waiting).
+    approval_s: null

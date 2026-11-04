@@ -1,0 +1,3 @@
+# Shared with the EAE project: the EAE limit-check FB must use the same values.
+# Phase 0 only implements depth clipping; bounds, no-go zones, dip/azimuth come in Phase 7.
+max_depth_m: 500.0
