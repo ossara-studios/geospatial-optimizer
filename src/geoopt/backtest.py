@@ -46,7 +46,7 @@ def _seed_set_cfg(cfg: Config, ss: SeedSet, out_dir: Path) -> Config:
 
 
 async def _one_run(
-    cfg: Config, seed_set: str, strategy: str, rng_seed: int, run_dir: Path
+    cfg: Config, seed_set: str, strategy: str, rng_seed: int, run_dir: Path, label: str = ""
 ) -> pd.DataFrame:
     loop, lab = build_inprocess_loop(cfg, strategy, run_dir, rng_seed=rng_seed, write_grid=False)
     truth = lab.truth_for_scoring()
@@ -66,7 +66,8 @@ async def _one_run(
         rows.append(
             {
                 "seed_set": seed_set,
-                "strategy": strategy,
+                "strategy": label or strategy,
+                "beta": cfg.planner.beta if strategy == "adaptive" else float("nan"),
                 "rng_seed": rng_seed,
                 "iteration": 0 if record is None else record.iteration,
                 "holes": len(loop.drilled_holes),
@@ -121,7 +122,55 @@ def run_backtest(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
     return results
 
 
-def summarize_backtest(results: pd.DataFrame, cfg: Config) -> dict:
+def run_beta_sweep(cfg: Config, out_dir: Path | None = None) -> pd.DataFrame:
+    """Adaptive at each `backtest.beta_sweep` beta, on the main backtest's seed sets and budget.
+
+    Writes `<out_dir>/beta_sweep/`; if the main backtest's results.parquet exists, its runs
+    (adaptive at planner.beta and every baseline) are included for comparison.
+    """
+    bt = cfg.backtest
+    out_dir = out_dir or bt.out_dir
+    sweep_dir = out_dir / "beta_sweep"
+    sweep_dir.mkdir(parents=True, exist_ok=True)
+    frames = []
+    for ss in bt.seed_sets:
+        ss_cfg = _seed_set_cfg(cfg, ss, out_dir)
+        prepare(ss_cfg)
+        for beta in bt.beta_sweep:
+            label = f"adaptive-b{beta:g}"
+            b_cfg = ss_cfg.model_copy(
+                update={"planner": ss_cfg.planner.model_copy(update={"beta": beta})}
+            )
+            t0 = time.perf_counter()
+            run_dir = sweep_dir / "runs" / ss.name / label
+            df = asyncio.run(_one_run(b_cfg, ss.name, "adaptive", cfg.seed, run_dir, label))
+            frames.append(df)
+            last = df.iloc[-1]
+            log.info(
+                "beta_sweep seed_set=%s beta=%g holes=%d metres=%.0f ore_m=%.0f "
+                "f1_undrilled=%.3f seconds=%.0f",
+                ss.name,
+                beta,
+                last["holes"],
+                last["cum_metres"],
+                last["ore_m"],
+                last["f1_undrilled"],
+                time.perf_counter() - t0,
+            )
+    results = pd.concat(frames, ignore_index=True)
+    main = out_dir / "results.parquet"
+    if main.exists():
+        base = pd.read_parquet(main)
+        base.loc[base["strategy"] == "adaptive", "strategy"] = f"adaptive-b{cfg.planner.beta:g}"
+        results = pd.concat([base, results], ignore_index=True)
+    results.to_parquet(sweep_dir / "results.parquet", index=False)
+    summary = summarize_backtest(results, cfg, with_estimates=False)
+    (sweep_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+    plot_backtest(results, cfg, sweep_dir / "beta_sweep.html")
+    return results
+
+
+def summarize_backtest(results: pd.DataFrame, cfg: Config, with_estimates: bool = True) -> dict:
     """Per strategy: metric at fixed metre checkpoints and metres to the F1 target."""
     budget = cfg.backtest.metre_budget
     checkpoints = np.array([0.25, 0.5, 1.0]) * budget
@@ -134,7 +183,7 @@ def summarize_backtest(results: pd.DataFrame, cfg: Config) -> dict:
     for strategy, g in results.groupby("strategy"):
         runs = [r.sort_values("iteration") for _, r in g.groupby(["seed_set", "rng_seed"])]
         entry: dict = {"runs": len(runs)}
-        for metric in ("ore_m", "f1_undrilled"):
+        for metric in ("ore_m", "f1_undrilled", "bacc_undrilled"):
             vals = np.array([on_metre_grid(r, metric, checkpoints) for r in runs])
             entry[metric] = {
                 f"at_{int(c)}m": {
@@ -159,8 +208,9 @@ def summarize_backtest(results: pd.DataFrame, cfg: Config) -> dict:
             float(np.nanmean(holes_to_target)) if np.isfinite(holes_to_target).any() else None
         )
         out["strategies"][strategy] = entry
-    out["environment_estimates"] = _env_estimates(out, cfg)
-    out["discovery_equivalent"] = _discovery_equivalent(results, cfg)
+    if with_estimates:
+        out["environment_estimates"] = _env_estimates(out, cfg)
+        out["discovery_equivalent"] = _discovery_equivalent(results, cfg)
     return out
 
 
@@ -243,7 +293,16 @@ def _env_estimates(summary: dict, cfg: Config) -> dict:
     return out
 
 
-COLORS = {"adaptive": "#2a6fdb", "grid": "#d9822b", "historical": "#7a7a7a", "random": "#3aa676"}
+COLORS = {
+    "adaptive": "#2a6fdb",
+    "grid": "#d9822b",
+    "historical": "#7a7a7a",
+    "random": "#3aa676",
+    "adaptive-b0.5": "#2a6fdb",
+    "adaptive-b1": "#6a51a3",
+    "adaptive-b2": "#c2185b",
+    "adaptive-b4": "#e6550d",
+}
 
 
 def plot_backtest(results: pd.DataFrame, cfg: Config, path: Path) -> None:

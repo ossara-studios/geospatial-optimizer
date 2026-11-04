@@ -74,6 +74,7 @@ backtest:
   max_holes: 300
   ore_threshold: 0.5
   f1_target: 0.6
+  beta_sweep: [1.0, 2.0, 4.0]  # fixed before seeing sweep results; planner.beta is the base
 
 opcua:
   # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).

@@ -11,7 +11,7 @@ from typing import Annotated
 
 import typer
 
-from geoopt.backtest import run_backtest
+from geoopt.backtest import run_backtest, run_beta_sweep
 from geoopt.config import DEFAULT_CONFIG_PATH, load_config
 from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
@@ -68,10 +68,17 @@ def run_loop(
 @app.command()
 def backtest(
     config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+    beta_sweep: Annotated[
+        bool, typer.Option("--beta-sweep", help="Adaptive only, at each backtest.beta_sweep.")
+    ] = False,
 ) -> None:
     """Run every strategy over every seed set with the same metre budget."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
+    if beta_sweep:
+        run_beta_sweep(cfg)
+        typer.echo(f"wrote {cfg.backtest.out_dir / 'beta_sweep'}")
+        return
     run_backtest(cfg)
     typer.echo(f"wrote {cfg.backtest.out_dir}")
 

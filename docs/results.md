@@ -115,6 +115,43 @@ drilling (193 m), and it drilled only 2 of the 15 wedge holes.
   - The environmental factors.
   - The 500 m depth limit (clips 117 candidates).
 
+## β sweep: discovery vs delineation
+- **What ran:** adaptive at β = 1, 2 and 4, values fixed before any sweep result. Same three seed
+  sets, candidates and 15,000 m budget as above. β = 0.5 and the baselines are the runs above.
+- **How to regenerate:** `geoopt backtest --beta-sweep`, which writes `runs/backtest/beta_sweep/`.
+- **Format:** mean (min–max) at the full budget. Balanced accuracy (bacc) is on undrilled
+  composites; 0.5 = chance.
+
+| Strategy | Ore metres | F1 undrilled | Bacc undrilled |
+|---|---|---|---|
+| adaptive β = 0.5 | **4,772** (4,372–5,098) | 0.10 (0.05–0.14) | 0.526 |
+| adaptive β = 1 | 4,072 (3,945–4,226) | 0.17 (0.14–0.19) | 0.543 |
+| adaptive β = 2 | 2,361 (1,654–2,718) | 0.17 (0.14–0.19) | 0.542 |
+| adaptive β = 4 | 1,273 (978–1,487) | 0.17 (0.15–0.19) | 0.540 |
+| random (15 runs) | 2,143 (1,786–2,492) | 0.17 (0.11–0.23) | 0.542 |
+| historical | 1,891 (1,776–1,991) | 0.13 (0.07–0.21) | 0.531 |
+| grid | 1,291 (1,210–1,403) | 0.09 (0.06–0.13) | 0.520 |
+
+**β = 0.5 → 1:**
+- Delineation F1 rises from 0.10 to 0.17. That matches random, the best baseline, and is above
+  historical's 0.13.
+- Discovery drops only 15 %: 4,072 ore metres is still 2.2× historical and 1.9× random.
+
+**Above β = 1:** no further delineation gain, and discovery falls steeply. β = 4 finds less ore than
+historical drilling.
+
+**Delineation ceiling.** Every strategy that isn't purely exploiting sits at F1 ≈ 0.17 and
+bacc ≈ 0.54, barely above chance. At this drilling density, roughly 50–80 new holes over 706
+candidates with a 20 m east–west correlation length, delineating the undrilled ground is limited by
+how far each hole's information reaches, not by where the holes go.
+
+**Caveat.** β = 1 is chosen from these results, so it is an operating point selected on Hillside,
+not an independently validated setting. Confirming it needs another deposit or a seed set held back
+from selection.
+
 ## Next
-A β sweep (1, 2, 4), adaptive only, all three seed sets, fixed in advance and reported as a
-discovery-versus-delineation trade-off curve rather than tuned on held-out results.
+- Confirm β = 1 on a held-back seed set or a second deposit before making it the default.
+- Delineation needs a different lever than β. Candidates:
+  - a stronger spacing penalty;
+  - an explicit boundary-uncertainty term (P(ore) near 0.5) in the score;
+  - evaluating delineation within a radius of drilling rather than over the whole deposit.

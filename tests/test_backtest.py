@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from geoopt.backtest import run_backtest
+from geoopt.backtest import run_backtest, run_beta_sweep
 from geoopt.config import Config, SeedSet
 from geoopt.metrics import classification, metres_to_target, on_metre_grid, ore_metres
 
@@ -63,3 +63,27 @@ def test_backtest_same_budget_for_every_strategy(prepared_cfg: Config, tmp_path:
     assert set(summary["discovery_equivalent"]["vs"]) == {"grid", "random"}
     assert summary["discovery_equivalent"]["label"] == "ESTIMATE"
     assert (tmp_path / "bt" / "backtest.html").exists()
+
+
+def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) -> None:
+    cfg = prepared_cfg.model_copy(
+        update={
+            "backtest": prepared_cfg.backtest.model_copy(
+                update={
+                    "strategies": ["adaptive", "random"],
+                    "random_seeds": [1],
+                    "seed_sets": [SeedSet(name="a", method="spread", n_seed=5, seed=1)],
+                    "metre_budget": 300.0,
+                    "max_holes": 50,
+                    "beta_sweep": [2.0],
+                }
+            )
+        }
+    )
+    run_backtest(cfg, tmp_path / "bt")
+    results = run_beta_sweep(cfg, tmp_path / "bt")
+    labels = set(results["strategy"])
+    assert labels == {f"adaptive-b{cfg.planner.beta:g}", "adaptive-b2", "random"}
+    assert set(results.loc[results["strategy"] == "adaptive-b2", "beta"]) == {2.0}
+    summary = json.loads((tmp_path / "bt" / "beta_sweep" / "summary.json").read_text())
+    assert "bacc_undrilled" in summary["strategies"]["adaptive-b2"]
