@@ -98,7 +98,7 @@ def prepared_cfg(cfg: Config, tmp_path: Path) -> Config:
     return cfg.model_copy(
         update={
             "data": _data_cfg(tmp_path),
-            "split": cfg.split.model_copy(update={"n_seed": 5}),
+            "split": cfg.split.model_copy(update={"n_seed": 5, "method": "spread"}),
             "loop": cfg.loop.model_copy(
                 update={"runs_dir": tmp_path / "runs", "max_holes": 4, "eval_grid": (6, 6, 4)}
             ),

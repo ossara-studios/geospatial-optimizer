@@ -8,14 +8,21 @@ nodes_file: opcua_nodes.yaml
 data:
   raw_dir: ../data/raw
   processed_dir: ../data/processed
-  # Fill in after inspecting the Copper Creek files and writing docs/data_schema.md.
-  # Each table: {file: <name in raw_dir>, sheet: <Excel sheet or null>, columns: {canonical: raw}}.
-  collars: null
-  surveys: null
-  assays: null
-  depth_unit: null      # m | ft  (collar coordinates are WGS 84 UTM 12N metres per Faraday's notes)
-  cu_unit: null         # pct | ppm
-  dip_convention: null  # negative_down | positive_down
+  # Hillside Cu-Au (Rex Minerals), built from SARIG by scripts/build_hillside.py
+  # (see scripts/fetch_data.md and docs/data_schema.md).
+  collars:
+    file: hillside/collars.csv
+    columns: {hole_id: hole_id, x: x, y: y, z: z, total_depth: total_depth,
+              azimuth: azimuth, dip: dip, drill_date: drill_date}
+  surveys:
+    file: hillside/surveys.csv
+    columns: {hole_id: hole_id, depth: depth, azimuth: azimuth, dip: dip}
+  assays:
+    file: hillside/assays.csv
+    columns: {hole_id: hole_id, from_m: from_m, to_m: to_m, cu: cu}
+  depth_unit: m                  # SARIG depths are metres; collars GDA2020 MGA zone 53
+  cu_unit: pct                   # build script converts SARIG ppm to %
+  dip_convention: negative_down  # SARIG INCLINATION: -60 = 60 deg below horizontal
   below_detection_factor: 0.5
   origin: null
 
@@ -30,8 +37,8 @@ composite:
   min_coverage: 0.5
 
 split:
-  n_seed: 20
-  method: spread   # earliest needs drill dates on every hole
+  n_seed: 60
+  method: earliest   # Hillside has a drill date on every hole: seed = first holes drilled
 
 model:
   log_eps: 0.001      # % Cu added before log (below-detection values stay finite)

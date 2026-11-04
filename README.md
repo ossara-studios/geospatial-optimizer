@@ -3,6 +3,12 @@
 Recommends the next copper exploration drillhole and runs each recommendation through an
 EcoStruxure Automation Expert (IEC 61499) loop over OPC UA: limit checks, operator approval, dispatch.
 
+## Data
+Hillside Cu-Au deposit (Rex Minerals), from the Geological Survey of South Australia's SARIG data
+package. Attribution: Department for Energy and Mining, Government of South Australia,
+Geoscientific Data, sourced on 4 November 2026, https://map.sarig.sa.gov.au/ (CC-BY 4.0).
+To rebuild it, see [scripts/fetch_data.md](scripts/fetch_data.md). The raw data isn't committed.
+
 ## Setup
 ```bash
 python3 -m venv .venv

@@ -1,21 +1,36 @@
 # Data schema
 
-## Source: Faraday Copper, Copper Creek drillhole database
-Status: **raw files not yet inspected.** The sections marked *TBD* are filled in once the files are in `data/raw/`.
+## Source: Hillside Cu-Au deposit, from SARIG (Geological Survey of South Australia)
+**Attribution (CC-BY 4.0):** Department for Energy and Mining, Government of South Australia,
+Geoscientific Data (SARIG data package, July 2025 extract), sourced on 4 November 2026,
+https://map.sarig.sa.gov.au/
 
-What Faraday's *Notes to Drillhole Database* (May 2024) says about the files:
-- They're in an Excel spreadsheet. Holes date from 1956 to Faraday's Phase III results (to May 14, 2024), and they include the database SRK used for the February 2023 resource estimate.
-- Collar coordinates are in **WGS 84 UTM Zone 12N** (metres).
-- Assays: Cu, Mo, Ag, Au. A **blank** cell means no analysis was done. A value **below the detection limit** is stored as **−DL**.
+**Deposit:** Hillside (Rex Minerals (SA) Pty Ltd), Yorke Peninsula, SA. That's the Rex Minerals
+mineral-exploration holes on the Stansbury 1:100k sheet, drilled 2006–2013. How the files are
+fetched and built is in [scripts/fetch_data.md](../scripts/fetch_data.md).
 
-### Raw tables (TBD after inspection)
-| Table | File / sheet | Columns → canonical | Notes |
-|---|---|---|---|
-| Collars | TBD | TBD | Drill dates present? |
-| Surveys | TBD | TBD | Dip sign convention? |
-| Assays | TBD | TBD | Cu unit (% or ppm)? Depth unit (m or ft)? |
+Copper Creek (Faraday Copper) was the original choice, but its download page is offline. Its
+notes are kept below in case it comes back.
 
-Record these in the `data` section of `config/default.yaml`. `geoopt prepare` refuses to run while any of them is null.
+### Raw SARIG tables used
+| SARIG file | Columns used | Notes |
+|---|---|---|
+| `sarig_dh_details_exp.csv` | `DRILLHOLE_NO`, `DH_NAME`, `EASTING/NORTHING_GDA2020`, `ZONE_GDA2020`, `ELEVATION_M`, `INCLINATION`, `AZIMUTH`, `MAX_DRILLED_DEPTH`, `MAX_DRILLED_DEPTH_DATE`, `DRILLING_METHODS` | One row per hole. Collars are GDA2020 / MGA zone 53 (metres). `INCLINATION` is negative down. Every Hillside hole has a date. |
+| `sarig_rs_chem_exp.csv` | `SAMPLE_NO`, `DRILLHOLE_NUMBER`, `DH_DEPTH_FROM/TO`, `CHEM_CODE`, `VALUE`, `UNIT`, `CHEM_METHOD_CODE`, `LABORATORY`, `SAMPLE_ANALYSIS_NO` | Long format (one row per sample per element). Hillside Cu is in **ppm**, mostly 1 m samples. |
+
+### Build decisions (`scripts/build_hillside.py`; counts go in `build_report.json`)
+- **Aircore holes are excluded** (shallow, low sample quality). We keep diamond core and RC.
+- **There are no downhole surveys in SARIG.** Each hole gets one station from its collar
+  azimuth/dip, so holes are modelled as straight lines. This is a stated limitation.
+- **Missing collar elevations** (about 20% of holes) are filled with the median of the 5 nearest
+  surveyed collars. The terrain is flat, 23–157 m.
+- **Cu:** ppm is converted to %. Where a sample has several analyses, fused-bead XRF
+  (`ME-XRF21n`, ALS) is preferred over ICP-MS (`IC3M`, AMDEL). Overlapping intervals in a hole
+  keep the first. Negative values (−DL) pass through to the loader.
+
+### Copper Creek notes (not in use)
+- Faraday's notes say the data is an Excel workbook in WGS 84 UTM 12N metres.
+- A blank assay cell means not analysed, and below-detection is stored as **−DL**.
 
 ## Canonical tables (what `geoopt.data.load` produces)
 All lengths are in metres. X is east, Y north, Z up, in **local** coordinates (source CRS minus `origin`; the origin is written to `meta.json`).

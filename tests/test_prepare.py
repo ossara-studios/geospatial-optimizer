@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from conftest import N_HOLES
 
-from geoopt.config import Config
+from geoopt.config import Config, DataConfig
 from geoopt.data.load import DataConfigIncomplete, clean_cu, load_tables
 from geoopt.data.prepare import prepare
 
@@ -33,8 +33,9 @@ def test_prepare_writes_tables_and_keeps_truth_separate(prepared_cfg: Config) ->
 
 
 def test_prepare_refuses_unconfirmed_config(cfg: Config) -> None:
+    unconfirmed = DataConfig(raw_dir=cfg.data.raw_dir, processed_dir=cfg.data.processed_dir)
     with pytest.raises(DataConfigIncomplete, match="collars"):
-        load_tables(cfg.data)
+        load_tables(unconfirmed)
 
 
 def test_clean_cu_handles_below_detection_and_blanks() -> None:
