@@ -182,9 +182,11 @@ def build_app(cfg: Config) -> Starlette:
         for r in recs:
             h = cand.loc[r["hole_idx"]] if r["hole_idx"] in cand.index else None
             lab = _lab(run, r["hole_idx"]) if r.get("metres_drilled", 0) > 0 else None
-            ore = float(lab.loc[lab["cu"] > cfg.model.cutoff_pct, "length_m"].sum()) if (
-                lab is not None and len(lab)
-            ) else 0.0  # fmt: skip
+            ore_rows = lab[lab["cu"] > cfg.model.cutoff_pct] if lab is not None else None
+            ore = float(ore_rows["length_m"].sum()) if ore_rows is not None else 0.0
+            mean_cu = (  # length-weighted Cu over the ore intervals
+                float((ore_rows["cu"] * ore_rows["length_m"]).sum() / ore) if ore > 0 else None
+            )
             rows.append(
                 {
                     "iteration": r["iteration"],
@@ -199,6 +201,7 @@ def build_app(cfg: Config) -> Starlette:
                     "decision": r.get("decision"),
                     "metres": r.get("metres_drilled", 0.0),
                     "ore_m": ore,
+                    "mean_cu": mean_cu,
                     "prob_ore": r.get("prob_ore"),
                     "exp_ore_m": r.get("exp_ore_m"),
                     "kpis": r.get("kpis") or {},

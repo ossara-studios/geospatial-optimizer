@@ -4,157 +4,185 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Drill Planner Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0a0f17;
-    --panel: #111927;
-    --panel-2: #162133;
-    --line: #22324a;
-    --text: #e6edf6;
-    --muted: #8a9bb3;
-    --faint: #56677f;
-    --accent: #3fb6ff;
-    --ore: #f5b83d;
-    --ore-hot: #ff7a3d;
-    --waste: #4a5a72;
-    --ok: #3ddc97;
-    --warn: #f5b83d;
-    --bad: #ff5d6c;
-    --radius: 12px;
+    --bg: #0f141a;
+    --surface: #131920;
+    --raise: #19202a;
+    --rule: #252d38;
+    --rule-soft: #1c232d;
+    --text: #d6dbe1;
+    --text-2: #9aa4b1;
+    --text-3: #6f7a88;
+    --teal: #4fae9f;
+    --teal-dim: #2c5f58;
+    --gold: #d9a64a;
+    --gold-hi: #f0c46a;
+    --waste: #586371;
+    --alert: #c9705f;
+    --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
-  .wrap { max-width: 1600px; margin: 0 auto; padding: 16px 20px 24px; }
-  header { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
-  .brand { display: flex; flex-direction: column; min-width: 220px; }
-  .brand b { font-size: 18px; letter-spacing: .2px; }
-  .brand span { color: var(--muted); font-size: 12px; }
-  .pipeline { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; justify-content: center; }
-  .chip { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px;
-    background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-size: 12.5px;
-    transition: all .25s; }
-  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
-  .chip.done { color: var(--text); }
-  .chip.done i { background: var(--ok); }
-  .chip.active { color: var(--text); border-color: var(--accent); background: #12263b;
-    box-shadow: 0 0 0 3px rgba(63,182,255,.12); }
-  .chip.active i { background: var(--accent); animation: pulse 1s infinite; }
-  .chip.bad { border-color: var(--bad); color: var(--text); }
-  .chip.bad i { background: var(--bad); }
-  .arrow { color: var(--faint); align-self: center; font-size: 12px; }
-  .conn { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
-  .conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
-  .conn.on i { background: var(--ok); }
-  @keyframes pulse { 50% { opacity: .35; } }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 var(--sans);
+    -webkit-font-smoothing: antialiased; }
+  .mono { font-family: var(--mono); font-feature-settings: "zero" 0; }
+  .eyebrow { font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
 
-  .grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(340px, 1fr); gap: 14px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 14px 16px; min-width: 0; }
-  .card h2 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .6px; }
-  .card .sub { color: var(--text); font-size: 15px; margin-bottom: 8px; }
-  .card .sub em { font-style: normal; color: var(--muted); }
-  canvas { display: block; width: 100%; }
-  #section { aspect-ratio: 16 / 9.2; }
-  #plan { aspect-ratio: 1 / 1.18; }
-  #chart { aspect-ratio: 16 / 5; }
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px;
-    margin-top: 8px; align-items: center; }
-  .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-  .ramp { width: 90px; height: 10px; border-radius: 3px;
-    background: linear-gradient(90deg, #0d1a2b, #13405a, #1f7a8c, #f5b83d, #ff7a3d); }
-  .side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  /* App bar */
+  .bar { display: flex; align-items: center; gap: 24px; height: 44px; padding: 0 20px;
+    border-bottom: 1px solid var(--rule); background: var(--surface); }
+  .mark { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
+  .mark b { font-weight: 600; font-size: 13.5px; letter-spacing: .01em; }
+  .mark span { color: var(--text-3); }
+  .meta { display: flex; gap: 18px; color: var(--text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; }
+  .meta em { font-style: normal; color: var(--text-3); margin-right: 6px; }
+  .grow { flex: 1; }
+  .link { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+  .link i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
+  .link.on i { background: var(--teal); }
 
-  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
-  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 12px 14px; min-width: 0; }
-  .kpi .l { color: var(--muted); font-size: 12px; }
-  .kpi .v { font-size: 26px; font-weight: 650; letter-spacing: -.3px; margin-top: 2px;
+  /* Workflow stepper */
+  .steps { display: flex; align-items: stretch; height: 38px; padding: 0 20px; border-bottom: 1px solid var(--rule);
+    background: var(--bg); overflow-x: auto; }
+  .step { display: flex; align-items: center; gap: 8px; padding: 0 16px 0 0; margin-right: 16px; color: var(--text-3);
+    white-space: nowrap; position: relative; font-size: 12.5px; }
+  .step .n { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
+  .step::after { content: ""; width: 18px; height: 1px; background: var(--rule); margin-left: 16px; }
+  .step:last-of-type::after { display: none; }
+  .step.done { color: var(--text-2); }
+  .step.done .n { color: var(--teal); }
+  .step.active { color: var(--text); }
+  .step.active .n { color: var(--teal); }
+  .step.active::before { content: ""; position: absolute; left: 0; right: 34px; bottom: -1px; height: 2px; background: var(--teal); }
+  .step:last-of-type.active::before { right: 16px; }
+  .step.bad { color: var(--alert); }
+  .step.bad .n { color: var(--alert); }
+  .step.bad::before { content: ""; position: absolute; left: 0; right: 34px; bottom: -1px; height: 2px; background: var(--alert); }
+  .req { margin-left: auto; display: flex; align-items: center; gap: 16px; color: var(--text-2); font-size: 11.5px; white-space: nowrap; }
+  .req em { font-style: normal; color: var(--text-3); margin-right: 6px; }
+
+  /* Instrument panel */
+  .panel { display: grid; grid-template-columns: 2fr 2fr 2fr; border-bottom: 1px solid var(--rule); background: var(--surface); }
+  .group { padding: 10px 20px 12px; border-right: 1px solid var(--rule); min-width: 0; }
+  .group:last-child { border-right: 0; }
+  .group .eyebrow { margin-bottom: 8px; }
+  .cells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+  .cell { min-width: 0; }
+  .cell + .cell { border-left: 1px solid var(--rule-soft); padding-left: 20px; }
+  .cell .l { color: var(--text-2); font-size: 12px; }
+  .cell .v { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: -.01em; line-height: 1.25;
     font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .kpi .v small { font-size: 14px; color: var(--muted); font-weight: 500; margin-left: 3px; }
-  .kpi .s { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap;
-    overflow: hidden; text-overflow: ellipsis; }
-  .kpi.hero { background: linear-gradient(160deg, #1a2a17 0%, var(--panel) 70%); border-color: #2f4a2a; }
-  .kpi.hero .v { color: var(--ok); }
-  .kpi.ore .v { color: var(--ore); }
-  .note { color: var(--faint); font-size: 11.5px; margin-top: 8px; }
+  .cell .v small { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: 4px; letter-spacing: 0; }
+  .cell .s { font-family: var(--mono); font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cell.ore .v { color: var(--gold-hi); }
+  .cell.pos .v { color: var(--teal); }
+  .cell.neg .v { color: var(--text-2); }
 
-  .holes { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .holes th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px;
-    border-bottom: 1px solid var(--line); }
-  .holes td { padding: 5px 6px; border-bottom: 1px solid #18243a; }
-  .holes td.n { text-align: right; }
-  .holes tr.cur td { color: var(--accent); }
-  .tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; }
-  .tag.ore { background: rgba(245,184,61,.15); color: var(--ore); }
-  .tag.waste { background: rgba(138,155,179,.12); color: var(--muted); }
+  /* Workspace */
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 440px; min-height: 0; }
+  .pane { min-width: 0; }
+  .pane + .pane { border-left: 1px solid var(--rule); }
+  .head { display: flex; align-items: baseline; gap: 16px; padding: 12px 20px 8px; flex-wrap: wrap; }
+  .head h2 { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
+  .kv { display: flex; gap: 18px; flex-wrap: wrap; color: var(--text); font-size: 11.5px; }
+  .kv span em { font-style: normal; color: var(--text-3); margin-right: 6px; font-family: var(--sans); font-size: 10.5px;
+    letter-spacing: .06em; text-transform: uppercase; }
+  .kv .hole { color: var(--teal); }
+  .viz { padding: 0 20px; }
+  canvas { display: block; width: 100%; }
+  #section { height: max(420px, calc(100vh - 262px)); }
+  #plan { height: 340px; }
+  #chart { height: 120px; }
+  .legend { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; padding: 10px 20px 14px; color: var(--text-2); font-size: 11.5px; }
+  .legend > span { display: inline-flex; align-items: center; gap: 8px; }
+  .bands { display: inline-flex; align-items: center; gap: 0; }
+  .bands i { width: 18px; height: 8px; display: inline-block; }
+  .bands b { font: 400 10.5px var(--mono); color: var(--text-3); margin: 0 6px; }
+  .mk { display: inline-block; }
+  .mk.ore { width: 14px; height: 4px; background: var(--gold-hi); }
+  .mk.waste { width: 14px; height: 2px; background: var(--waste); }
+  .mk.drill { width: 14px; height: 2px; background: var(--teal); }
+  .mk.plan { width: 14px; border-top: 1px dashed var(--text-3); }
+  .mk.sample { width: 5px; height: 5px; background: var(--gold); }
+  .sub { border-top: 1px solid var(--rule); }
 
-  .bottom { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(340px, 1fr); gap: 14px;
-    margin-top: 14px; }
-  @media (max-width: 1100px) {
-    .grid, .bottom { grid-template-columns: 1fr; }
-    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; font-weight: 500; color: var(--text-3); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 6px 20px 6px 0; border-bottom: 1px solid var(--rule); }
+  th:first-child, td:first-child { padding-left: 20px; }
+  td { padding: 5px 20px 5px 0; border-bottom: 1px solid var(--rule-soft); font-family: var(--mono); font-variant-numeric: tabular-nums;
+    white-space: nowrap; }
+  td.r, th.r { text-align: right; }
+  tr.cur td { color: var(--teal); }
+  .res-ore { color: var(--gold-hi); }
+  .res-waste { color: var(--text-3); }
+  .foot { padding: 10px 20px 16px; color: var(--text-3); font-size: 11px; border-top: 1px solid var(--rule); }
+
+  @media (max-width: 1180px) {
+    .work { grid-template-columns: 1fr; }
+    .pane + .pane { border-left: 0; border-top: 1px solid var(--rule); }
+    .panel { grid-template-columns: 1fr; }
+    .group { border-right: 0; border-bottom: 1px solid var(--rule); }
+    .group:last-child { border-bottom: 0; }
   }
-  @media (max-width: 560px) {
-    .wrap { padding: 12px 16px; }
-    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .arrow { display: none; }
+  @media (max-width: 640px) {
+    .bar, .steps, .head, .viz, .legend, .foot, .group { padding-left: 16px; padding-right: 16px; }
+    th:first-child, td:first-child { padding-left: 16px; }
+    .meta { display: none; }
+    .cells { grid-template-columns: 1fr; row-gap: 8px; }
+    .cell + .cell { border-left: 0; padding-left: 0; }
+    .req { display: none; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="brand"><b>Adaptive drill planner</b><span id="runname">Hillside Cu-Au · waiting for a run</span></div>
-    <div class="pipeline" id="pipeline"></div>
-    <div class="conn" id="conn"><i></i><span>OPC UA: offline</span></div>
-  </header>
+  <div class="bar">
+    <div class="mark"><b>Adaptive Drill Planner</b><span>Ossara</span></div>
+    <div class="meta mono"><span><em>DEPOSIT</em>Hillside Cu-Au</span><span><em>RUN</em><span id="run">–</span></span>
+      <span><em>CUTOFF</em><span id="cutoff">–</span></span></div>
+    <div class="grow"></div>
+    <div class="link" id="link"><i></i><span class="mono">OPC UA offline</span></div>
+  </div>
 
-  <div class="kpis" id="kpis"></div>
+  <nav class="steps" id="steps" aria-label="Decision cycle"></nav>
 
-  <div class="grid">
-    <div class="card">
-      <h2>Live section</h2>
-      <div class="sub" id="secTitle">Waiting for the first recommendation…</div>
-      <canvas id="section"></canvas>
+  <section class="panel" id="panel" aria-label="Programme indicators"></section>
+
+  <main class="work">
+    <div class="pane">
+      <div class="head">
+        <h2>Section A–A′ through active hole</h2>
+        <div class="kv mono" id="holeKv"><span>Waiting for the first recommendation</span></div>
+      </div>
+      <div class="viz"><canvas id="section" aria-label="Live drill section"></canvas></div>
       <div class="legend">
-        <span><span class="ramp"></span>Model: chance of ore (Cu &gt; <b id="cut">0.2</b>%)</span>
-        <span><span class="sw" style="background:var(--ore)"></span>Assayed ore</span>
-        <span><span class="sw" style="background:var(--waste)"></span>Assayed waste</span>
-        <span><span class="sw" style="background:var(--accent)"></span>Hole being drilled</span>
+        <span><span class="bands" id="bands"></span><span>Model P(Cu &gt; cutoff)</span></span>
+        <span><span class="mk ore"></span>Assayed ore</span>
+        <span><span class="mk waste"></span>Assayed waste</span>
+        <span><span class="mk sample"></span>Earlier assays within 40 m</span>
+        <span><span class="mk drill"></span>Drilled so far</span>
+        <span><span class="mk plan"></span>Planned trajectory</span>
       </div>
     </div>
-    <div class="side">
-      <div class="card">
-        <h2>Plan view</h2>
-        <div class="sub"><em>Best chance of ore at any depth · drilled collars</em></div>
-        <canvas id="plan"></canvas>
+    <div class="pane">
+      <div class="head"><h2>Plan</h2><div class="kv"><span>Highest P(ore) at any depth · collars · section line</span></div></div>
+      <div class="viz"><canvas id="plan" aria-label="Plan view"></canvas></div>
+      <div class="sub">
+        <div class="head"><h2>New ore found vs metres</h2><div class="kv" id="chartKv"></div></div>
+        <div class="viz"><canvas id="chart" aria-label="Discovery curve"></canvas></div>
       </div>
-    </div>
-  </div>
-
-  <div class="bottom">
-    <div class="side">
-      <div class="card">
-        <h2>New ore found vs metres drilled</h2>
-        <canvas id="chart"></canvas>
-        <div class="legend">
-          <span><span class="sw" style="background:var(--accent)"></span>Adaptive planner (this run)</span>
-          <span><span class="sw" style="background:#8a9bb3"></span>Drill beside known ore (rule of thumb)</span>
-        </div>
+      <div class="sub">
+        <table><thead><tr><th>#</th><th>Hole</th><th class="r">Metres</th><th class="r">Ore m</th><th class="r">Mean Cu</th><th>Result</th></tr></thead>
+          <tbody id="holes"></tbody></table>
       </div>
+      <div class="foot" id="assume"></div>
     </div>
-    <div class="card">
-      <h2>Holes</h2>
-      <table class="holes"><thead><tr><th>#</th><th>Hole</th><th class="n">Metres</th>
-        <th class="n">Ore m</th><th>Result</th></tr></thead><tbody id="holes"></tbody></table>
-      <div class="note" id="assume"></div>
-    </div>
-  </div>
-</div>
+  </main>
 
 <script>
 "use strict";
@@ -162,16 +190,25 @@ const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const REPLAY = params.has("replay");
 const SPEED = parseFloat(params.get("speed") || "1");
-const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const STAGES = ["Recommend", "Limit check", "Operator approval", "Drilling", "Assays", "Model update"];
+const C = {
+  bg: "#0f141a", ground: "#121820", sky: "#0f141a", rule: "#252d38", grid: "rgba(214,219,225,0.055)",
+  text: "#d6dbe1", text2: "#9aa4b1", text3: "#6f7a88", teal: "#4fae9f", gold: "#d9a64a", goldHi: "#f0c46a",
+  waste: "#586371", alert: "#c9705f",
+};
+// P(ore) bands: restrained slate to mineral ochre. Only the upper bands carry colour.
+const BANDS = [
+  [0.00, [18, 24, 32]], [0.25, [26, 33, 41]], [0.35, [39, 42, 41]], [0.50, [70, 60, 38]],
+  [0.65, [112, 86, 41]], [0.80, [160, 119, 48]],
+];
+const CONTOURS = [{ p: 0.5, w: 1, a: 0.75 }, { p: 0.35, w: 0.8, a: 0.35, dash: [2, 3] }, { p: 0.8, w: 1, a: 0.9 }];
+const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace';
+const SANS = '"IBM Plex Sans", "Segoe UI", system-ui, sans-serif';
 
-let S = null;          // /api/static
-let state = null;      // latest /api/state
-let section = null, prevSection = null, fadeT = 1;
-const cam = {};       // section view window, eased
-let sectionKey = "";
-let depthShown = 0, depthTarget = 0, depthTime = 0, drilling = false;
-let revealT = 0;       // assay reveal progress 0..1
+let S = null, state = null;
+let section = null, prevSection = null, fadeT = 1, sectionKey = "";
+const cam = {};
+let depthShown = 0, depthTarget = 0, depthTime = 0, revealT = 0;
 let replay = { i: 0, phase: "drill", t0: 0, depth: 0 };
 
 // ---------- helpers ----------
@@ -183,46 +220,97 @@ function fit(canvas) {
   ctx.setTransform(d, 0, 0, d, 0, 0);
   return { ctx, w: r.width, h: r.height };
 }
-const RAMP = [[0, [13, 26, 43]], [0.25, [19, 64, 90]], [0.5, [31, 122, 140]], [0.75, [245, 184, 61]], [1, [255, 122, 61]]];
-function ramp(p) {
-  p = Math.max(0, Math.min(1, (p - 0.08) / 0.72));   // background odds (~0.15) stay dark
-  for (let k = 1; k < RAMP.length; k++) {
-    if (p <= RAMP[k][0]) {
-      const [a, ca] = RAMP[k - 1], [b, cb] = RAMP[k], t = (p - a) / (b - a);
-      return ca.map((c, j) => Math.round(c + (cb[j] - c) * t));
-    }
-  }
-  return RAMP[RAMP.length - 1][1];
+function band(p) { let c = BANDS[0][1]; for (const [t, col] of BANDS) if (p >= t) c = col; return c; }
+function bilinear(rows, y, x) {
+  const h = rows.length, w = rows[0].length;
+  const x0 = Math.min(w - 2, Math.max(0, Math.floor(x))), y0 = Math.min(h - 2, Math.max(0, Math.floor(y)));
+  const fx = x - x0, fy = y - y0;
+  const a = rows[y0][x0], b = rows[y0][x0 + 1], c = rows[y0 + 1][x0], d = rows[y0 + 1][x0 + 1];
+  return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
 }
-function raster(rows) {           // 2D array of P(ore) -> offscreen canvas
-  const h = rows.length, w = rows[0].length, c = document.createElement("canvas");
-  c.width = w; c.height = h;
-  const ctx = c.getContext("2d"), img = ctx.createImageData(w, h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const [r, g, b] = ramp(rows[y][x]), o = 4 * (y * w + x);
+function bandImage(rows, up = 4) {          // smooth-interpolated, posterised into bands
+  const h = rows.length, w = rows[0].length, W = (w - 1) * up + 1, H = (h - 1) * up + 1;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const ctx = c.getContext("2d"), img = ctx.createImageData(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const [r, g, b] = band(bilinear(rows, y / up, x / up)), o = 4 * (y * W + x);
     img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
   return c;
 }
+// Marching squares: segments of the iso-line `lvl`, in grid coordinates (col, row).
+function isoSegments(rows, lvl) {
+  const segs = [], h = rows.length, w = rows[0].length;
+  const lerp = (a, b) => (lvl - a) / (b - a);
+  for (let i = 0; i < h - 1; i++) for (let j = 0; j < w - 1; j++) {
+    const a = rows[i][j], b = rows[i][j + 1], c = rows[i + 1][j + 1], d = rows[i + 1][j];
+    const idx = (a >= lvl) | ((b >= lvl) << 1) | ((c >= lvl) << 2) | ((d >= lvl) << 3);
+    if (idx === 0 || idx === 15) continue;
+    const T = [j + lerp(a, b), i], R = [j + 1, i + lerp(b, c)], B = [j + lerp(d, c), i + 1], L = [j, i + lerp(a, d)];
+    const map = { 1: [[L, T]], 2: [[T, R]], 3: [[L, R]], 4: [[R, B]], 5: [[L, T], [R, B]], 6: [[T, B]], 7: [[L, B]],
+      8: [[B, L]], 9: [[T, B]], 10: [[T, R], [B, L]], 11: [[R, B]], 12: [[R, L]], 13: [[T, R]], 14: [[L, T]] };
+    for (const s of map[idx]) segs.push(s);
+  }
+  return segs;
+}
+function upsample(rows, k) {
+  const h = rows.length, w = rows[0].length, out = [];
+  for (let y = 0; y <= (h - 1) * k; y++) { const r = []; for (let x = 0; x <= (w - 1) * k; x++) r.push(bilinear(rows, y / k, x / k)); out.push(r); }
+  return out;
+}
+function smooth(rows) {           // 3x3 box blur, edges clamped: rounds off grid facets
+  const h = rows.length, w = rows[0].length, out = [];
+  for (let y = 0; y < h; y++) { const r = []; for (let x = 0; x < w; x++) { let t = 0, n = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const yy = y + dy, xx = x + dx;
+      if (yy >= 0 && yy < h && xx >= 0 && xx < w) { t += rows[yy][xx]; n++; } }
+    r.push(t / n); } out.push(r); }
+  return out;
+}
+function prepField(rows) {
+  const K = 3, fine = smooth(upsample(rows, K));
+  const iso = CONTOURS.map(c => ({ ...c, segs: isoSegments(fine, c.p).map(seg => seg.map(([x, y]) => [x / K, y / K])) }));
+  return { rows, img: bandImage(fine, 2), iso, scale: 1 };
+}
+function drawField(ctx, f, gx, gy, alpha = 1) {   // gx(col) / gy(row) -> screen
+  const n = f.rows[0].length - 1, m = f.rows.length - 1;
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(f.img, gx(0), gy(0), gx(n) - gx(0), gy(m) - gy(0));
+  for (const c of f.iso) {
+    ctx.strokeStyle = `rgba(240,196,106,${c.a * alpha})`; ctx.lineWidth = c.w; ctx.setLineDash(c.dash || []);
+    ctx.beginPath();
+    for (const [[x1, y1], [x2, y2]] of c.segs) { ctx.moveTo(gx(x1), gy(y1)); ctx.lineTo(gx(x2), gy(y2)); }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+}
 const fmt = (v, d = 0) => v == null || !isFinite(v) ? "–" : v.toLocaleString("en-AU", { maximumFractionDigits: d, minimumFractionDigits: d });
+const sgn = (v, d = 0) => v == null || !isFinite(v) ? "–" : (v < 0 ? "−" : "") + fmt(Math.abs(v), d);
 const htmlCache = {};
 function setHTML(id, html) { if (htmlCache[id] !== html) { htmlCache[id] = html; $(id).innerHTML = html; } }
 async function getJSON(u) { const r = await fetch(u, { cache: "no-store" }); return r.json(); }
+const compass = (deg) => ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+function holeGeom(cur) { const dip = Math.abs(cur.dip) * Math.PI / 180; return { ds: Math.cos(dip), dz: -Math.sin(dip) }; }
+function sectionAz(cur) { return Math.abs(cur.dip) >= 89 ? 90 : cur.azimuth; }
+function intercept(assays, cut) {
+  if (!assays || !assays.length) return null;
+  let m = 0, cu = 0;
+  for (const [a, b, g] of assays) if (g > cut) { m += b - a; cu += (b - a) * g; }
+  return { m, grade: m ? cu / m : 0 };
+}
 
 // ---------- data flow ----------
 function view() {
-  // What to show now: live (OPC UA) or replaying the run folder's records.
   const recs = state ? state.records.filter(r => r.metres > 0) : [];
   if (REPLAY) {
     const i = Math.min(replay.i, Math.max(0, recs.length - 1));
     const r = recs[i];
     return { recs: recs.slice(0, replay.phase === "drill" ? i : i + 1), cur: r,
              iter: r ? (replay.phase === "learn" ? r.iteration : r.iteration - 1) : null,
-             stage: replay.phase === "drill" ? 3 : replay.phase === "assay" ? 4 : 5, live: false };
+             stage: replay.phase === "drill" ? 3 : replay.phase === "assay" ? 4 : 5, live: false, req: r ? r.iteration : null };
   }
-  const opc = state && state.opc;
-  const cur = state && state.current;
+  const opc = state && state.opc, cur = state && state.current;
   let stage = -1, bad = false;
   if (opc && opc["Rec.ReqId"] > 0) {
     const R = opc["Rec.ReqId"];
@@ -235,7 +323,7 @@ function view() {
   }
   const done = recs.some(r => cur && r.hole_idx === cur.hole_idx);
   return { recs, cur: cur ? { ...cur, metres: done ? recs.find(r => r.hole_idx === cur.hole_idx).metres : null } : null,
-           iter: null, stage, bad, live: !!opc, done };
+           iter: null, stage, bad, live: !!opc, req: opc ? opc["Rec.ReqId"] : null };
 }
 
 async function poll() {
@@ -247,86 +335,69 @@ async function poll() {
 }
 
 async function ensureSection(v) {
-  const holeIdx = v.cur ? (v.cur.hole_idx) : null;
-  if (holeIdx == null) return;
-  const nIter = v.recs.length;          // model state after the holes drilled so far
-  const key = `${holeIdx}:${nIter}:${v.iter}`;
+  if (!v.cur) return;
+  const key = `${v.cur.hole_idx}:${v.recs.length}:${v.iter}`;
   if (key === sectionKey) return;
   sectionKey = key;
-  const q = new URLSearchParams({ hole: holeIdx });
+  const q = new URLSearchParams({ hole: v.cur.hole_idx });
   if (v.iter != null) { q.set("iter", Math.max(1, v.iter)); q.set("upto", v.recs.length ? v.recs[v.recs.length - 1].iteration : 0); }
   if (params.get("run")) q.set("run", params.get("run"));
   const s = await getJSON("/api/section?" + q);
   if (!s.ok) return;
-  if (s.p) s.img = raster(s.p);
-  if (s.plan) s.planImg = raster(s.plan.plan.slice().reverse());
+  if (s.p) s.field = prepField(s.p);
+  if (s.plan) s.planField = prepField(s.plan.plan);
   prevSection = section; section = s; fadeT = 0;
 }
 
-// ---------- drawing ----------
-function holeGeom(cur) {
-  const dip = Math.abs(cur.dip) * Math.PI / 180;
-  return { ds: Math.cos(dip), dz: -Math.sin(dip) };   // per metre along hole, in section coords
-}
-
+// ---------- section ----------
 function drawSection(v, dt) {
   const { ctx, w, h } = fit($("section"));
   ctx.clearRect(0, 0, w, h);
-  const s = section;
-  const pad = { l: 58, r: 14, t: 10, b: 30 };
+  const pad = { l: 46, r: 8, t: 22, b: 26 };
   const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
-  ctx.fillStyle = "#0d1a2b"; ctx.fillRect(pad.l, pad.t, W, H);
+  const s = section;
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1; ctx.strokeRect(pad.l + .5, pad.t + .5, W - 1, H - 1);
   if (!s || !s.z || !v.cur) return;
   const [s0, s1] = s.s, [zTop, zBot] = s.z;
-  // View window around the active hole, true scale (1 m across = 1 m down), eased between holes.
-  const gq = holeGeom(v.cur), plannedV = Math.min(v.cur.depth, S.max_depth_m);
-  const span = Math.max(300, plannedV * -gq.dz + 140);
-  const want = { top: v.cur.z + 0.12 * span, span, mid: plannedV * gq.ds / 2 };
+  const g = holeGeom(v.cur), planned = Math.min(v.cur.depth, S.max_depth_m), cz = v.cur.z;
+  const span = Math.max(300, planned * -g.dz + 140);
+  const want = { top: cz + 0.06 * span, span, mid: planned * g.ds / 2 };
   if (!cam.win) cam.win = { ...want };
   for (const k of ["top", "span", "mid"]) cam.win[k] += (want[k] - cam.win[k]) * Math.min(1, dt * 3);
   const vz0 = cam.win.top, vz1 = vz0 - cam.win.span, sSpan = cam.win.span * W / H;
   const vs0 = cam.win.mid - sSpan / 2, vs1 = cam.win.mid + sSpan / 2;
   const X = (sv) => pad.l + (sv - vs0) / (vs1 - vs0) * W;
   const Y = (zv) => pad.t + (vz0 - zv) / (vz0 - vz1) * H;
-  ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, W, H); ctx.clip();
-  ctx.fillStyle = "#0a121f"; ctx.fillRect(pad.l, pad.t, W, H);   // sky / outside the model
-  // background, cross-fading when the model updates
+  const nc = s.p[0].length - 1, nr = s.p.length - 1;
+  const gx = (j) => X(s0 + j / nc * (s1 - s0)), gy = (i) => Y(zTop + i / nr * (zBot - zTop));
+
+  ctx.save(); ctx.beginPath(); ctx.rect(pad.l + 1, pad.t + 1, W - 2, H - 2); ctx.clip();
+  ctx.fillStyle = C.ground; ctx.fillRect(pad.l, pad.t, W, H);
   fadeT = Math.min(1, fadeT + dt / 0.9);
-  ctx.imageSmoothingEnabled = true;
-  const put = (img) => ctx.drawImage(img, X(s0), Y(zTop), X(s1) - X(s0), Y(zBot) - Y(zTop));
-  if (prevSection && prevSection.img && fadeT < 1 && prevSection.hole_idx === s.hole_idx) {
-    put(prevSection.img); ctx.globalAlpha = fadeT;
-  }
-  if (s.img) put(s.img);
-  ctx.globalAlpha = 1;
-  // ground surface at the collar
-  ctx.strokeStyle = "rgba(207,216,227,.35)"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(pad.l, Y(v.cur.z)); ctx.lineTo(pad.l + W, Y(v.cur.z)); ctx.stroke();
-  ctx.fillStyle = "#0a121f"; ctx.fillRect(pad.l, pad.t, W, Math.max(0, Y(v.cur.z) - pad.t));
-  // grid + axes
-  ctx.strokeStyle = "rgba(255,255,255,.06)";
+  if (prevSection && prevSection.field && fadeT < 1 && prevSection.hole_idx === s.hole_idx) drawField(ctx, prevSection.field, gx, gy, 1 - fadeT);
+  if (s.field) drawField(ctx, s.field, gx, gy, prevSection && prevSection.hole_idx === s.hole_idx ? fadeT : 1);
+  // above ground
+  const gyPx = Y(cz);
+  ctx.fillStyle = C.sky; ctx.fillRect(pad.l, pad.t, W, Math.max(0, gyPx - pad.t));
+  // grid
   const zs = cam.win.span > 500 ? 100 : 50, ss = sSpan > 900 ? 200 : 100;
-  for (let d = zs; v.cur.z - d >= vz1; d += zs) { const z = v.cur.z - d; ctx.beginPath(); ctx.moveTo(pad.l, Y(z)); ctx.lineTo(pad.l + W, Y(z)); ctx.stroke(); }
-  for (let sv = Math.ceil(vs0 / ss) * ss; sv <= vs1; sv += ss) { ctx.beginPath(); ctx.moveTo(X(sv), pad.t); ctx.lineTo(X(sv), pad.t + H); ctx.stroke(); }
-  ctx.restore();
-  ctx.fillStyle = css("--muted"); ctx.font = "11px Segoe UI, system-ui";
-  ctx.textAlign = "right"; ctx.textBaseline = "middle";
-  for (let d = 0; v.cur.z - d >= vz1; d += zs) ctx.fillText(d ? `${d} m` : "surface", pad.l - 6, Y(v.cur.z - d));
-  ctx.textAlign = "center"; ctx.textBaseline = "top";
-  for (let sv = Math.ceil(vs0 / ss) * ss; sv <= vs1; sv += ss)
-    ctx.fillText(sv === 0 ? "collar" : `${sv > 0 ? "+" : ""}${sv} m`, X(sv), pad.t + H + 8);
-  ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, W, H); ctx.clip();
-  // nearby assayed samples (seed holes and earlier holes)
+  ctx.strokeStyle = C.grid; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let d = zs; cz - d >= vz1; d += zs) { const y = Math.round(Y(cz - d)) + .5; ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + W, y); }
+  for (let sv = Math.ceil(vs0 / ss) * ss; sv <= vs1; sv += ss) { const x = Math.round(X(sv)) + .5; ctx.moveTo(x, gyPx); ctx.lineTo(x, pad.t + H); }
+  ctx.stroke();
+  // ground surface
+  ctx.strokeStyle = "#3a4452"; ctx.beginPath(); ctx.moveTo(pad.l, Math.round(gyPx) + .5); ctx.lineTo(pad.l + W, Math.round(gyPx) + .5); ctx.stroke();
+  ctx.strokeStyle = "rgba(58,68,82,.6)";
+  for (let x = pad.l + 4; x < pad.l + W; x += 7) { ctx.beginPath(); ctx.moveTo(x, gyPx); ctx.lineTo(x - 4, gyPx - 4); ctx.stroke(); }
+  // earlier assays near the plane
   const cut = S.cutoff_pct;
   for (const [sv, zv, cu] of s.samples) {
-    if (sv < s0 || sv > s1 || zv < zBot || zv > zTop) continue;
-    const ore = cu > cut;
-    ctx.fillStyle = ore ? "rgba(245,184,61,.95)" : "rgba(120,138,163,.45)";
-    ctx.beginPath(); ctx.arc(X(sv), Y(zv), ore ? 2.6 : 1.7, 0, 7); ctx.fill();
+    if (sv < vs0 || sv > vs1 || zv > vz0 || zv < vz1) continue;
+    if (cu > cut) { ctx.fillStyle = C.gold; ctx.fillRect(X(sv) - 2, Y(zv) - 2, 4, 4); }
+    else { ctx.fillStyle = "rgba(111,122,136,.55)"; ctx.fillRect(X(sv) - 1, Y(zv) - 1, 2, 2); }
   }
-  // the hole being drilled
-  const cur = v.cur, g = holeGeom(cur);
-  const planned = Math.min(cur.depth, S.max_depth_m);
+  // depth
   let depth;
   if (REPLAY) depth = replay.depth;
   else if (v.cur.metres != null) depth = v.cur.metres;
@@ -335,121 +406,182 @@ function drawSection(v, dt) {
     if (opc["Rig.ReqId"] === opc["Rec.ReqId"] && opc["Rig.State"] === 2) depth = opc["Rig.DepthDrilled"];
     else if (opc["Rig.ReqId"] === opc["Rec.ReqId"] && opc["Rig.State"] === 1) {
       if (opc["Rig.DepthDrilled"] !== depthTarget) { depthTarget = opc["Rig.DepthDrilled"]; depthTime = performance.now(); }
-      const extra = (performance.now() - depthTime) / 1000 * S.metres_per_second;
-      depth = Math.min(planned, depthTarget + extra);
-      drilling = true;
+      depth = Math.min(planned, depthTarget + (performance.now() - depthTime) / 1000 * S.metres_per_second);
     } else depth = 0;
-  } else depth = v.cur.metres != null ? v.cur.metres : (v.stage >= 1 && v.stage < 3 ? 0 : planned);
+  } else depth = v.stage >= 1 && v.stage < 3 ? 0 : planned;
   depthShown += (depth - depthShown) * Math.min(1, dt * 10);
   if (depth < depthShown) depthShown = depth;
-  const cz = cur.z;
-  // planned path (dashed)
-  ctx.setLineDash([5, 5]); ctx.strokeStyle = "rgba(63,182,255,.45)"; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(X(0), Y(cz)); ctx.lineTo(X(planned * g.ds), Y(cz + planned * g.dz)); ctx.stroke();
-  ctx.setLineDash([]);
-  // assays (revealed top to bottom), else the drill string
-  const assays = s.assays && (REPLAY ? replay.phase !== "drill" : v.cur.metres != null) ? s.assays : null;
-  if (assays) {
+  const P = (m) => [X(m * g.ds), Y(cz + m * g.dz)];
+  // planned trajectory
+  ctx.setLineDash([3, 4]); ctx.strokeStyle = "rgba(154,164,177,.55)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(...P(0)); ctx.lineTo(...P(planned)); ctx.stroke(); ctx.setLineDash([]);
+  // end-of-hole tick
+  const [ex, ey] = P(planned);
+  ctx.strokeStyle = "rgba(154,164,177,.7)"; ctx.beginPath(); ctx.moveTo(ex - 5 * g.dz * -1, ey - 5 * g.ds); ctx.lineTo(ex + 5 * g.dz * -1, ey + 5 * g.ds); ctx.stroke();
+  const showAssays = s.assays && (REPLAY ? replay.phase !== "drill" : v.cur.metres != null);
+  const nx = -g.dz, ny = g.ds;   // unit normal (screen), for interval bars
+  if (showAssays) {
     revealT = Math.min(1, revealT + dt / 1.2);
     const lim = revealT * planned;
-    for (const [a, b, cu] of assays) {
+    ctx.strokeStyle = C.teal; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(...P(0)); ctx.lineTo(...P(planned)); ctx.stroke();
+    for (const [a, b, cu] of s.assays) {
       if (a > lim) break;
       const bb = Math.min(b, lim), ore = cu > cut;
-      ctx.strokeStyle = ore ? (cu > 3 * cut ? css("--ore-hot") : css("--ore")) : css("--waste");
-      ctx.lineWidth = ore ? 7 : 4; ctx.lineCap = "butt";
-      ctx.beginPath(); ctx.moveTo(X(a * g.ds), Y(cz + a * g.dz)); ctx.lineTo(X(bb * g.ds), Y(cz + bb * g.dz)); ctx.stroke();
+      const [x1, y1] = P(a), [x2, y2] = P(bb), wpx = ore ? (cu > 3 * cut ? 7 : 5) : 2.5;
+      ctx.fillStyle = ore ? (cu > 3 * cut ? C.goldHi : C.gold) : C.waste;
+      ctx.beginPath();
+      ctx.moveTo(x1 + nx * wpx, y1 + ny * wpx); ctx.lineTo(x2 + nx * wpx, y2 + ny * wpx);
+      ctx.lineTo(x2 - nx * wpx, y2 - ny * wpx); ctx.lineTo(x1 - nx * wpx, y1 - ny * wpx); ctx.closePath(); ctx.fill();
+    }
+    const it = intercept(s.assays, cut);
+    if (it && revealT >= 1) {
+      const [lx, ly] = P(planned * 0.5);
+      label(ctx, lx + 14, ly, it.m ? `${fmt(it.m)} m @ ${fmt(it.grade, 2)}% Cu` : "No ore above cutoff", it.m ? C.goldHi : C.text2);
     }
   } else {
     revealT = 0;
     if (depthShown > 0.5) {
-      ctx.strokeStyle = css("--accent"); ctx.lineWidth = 4; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(X(0), Y(cz)); ctx.lineTo(X(depthShown * g.ds), Y(cz + depthShown * g.dz)); ctx.stroke();
-      // drill bit glow
-      const bx = X(depthShown * g.ds), by = Y(cz + depthShown * g.dz);
-      const grd = ctx.createRadialGradient(bx, by, 0, bx, by, 16);
-      grd.addColorStop(0, "rgba(255,255,255,.95)"); grd.addColorStop(.3, "rgba(63,182,255,.7)"); grd.addColorStop(1, "rgba(63,182,255,0)");
-      ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(bx, by, 16, 0, 7); ctx.fill();
+      ctx.strokeStyle = C.teal; ctx.lineWidth = 2.5; ctx.lineCap = "butt";
+      ctx.beginPath(); ctx.moveTo(...P(0)); ctx.lineTo(...P(depthShown)); ctx.stroke();
+      const [bx, by] = P(depthShown);
+      ctx.fillStyle = C.bg; ctx.strokeStyle = C.teal; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(bx, by, 3.5, 0, 7); ctx.fill(); ctx.stroke();
+      label(ctx, bx + 12, by, `${fmt(depthShown, 1)} m`, C.teal);
     }
   }
-  // rig at the collar
-  drawRig(ctx, X(0), Y(cz), cur.dip, (REPLAY ? replay.phase === "drill" : v.stage === 3));
+  drawRig(ctx, X(0), gyPx, v.cur.dip, REPLAY ? replay.phase === "drill" : v.stage === 3);
   ctx.restore();
-  // depth readout
-  ctx.fillStyle = css("--text"); ctx.font = "600 13px Segoe UI, system-ui"; ctx.textAlign = "left"; ctx.textBaseline = "top";
-  ctx.fillText(`${fmt(depthShown)} / ${fmt(planned)} m`, pad.l + 10, pad.t + 10);
+  // axes
+  ctx.font = `400 10.5px ${MONO}`; ctx.fillStyle = C.text3; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let d = 0; cz - d >= vz1; d += zs) { const y = Y(cz - d); if (y > pad.t + 4) ctx.fillText(d ? `${d}` : "0", pad.l - 8, y); }
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let sv = Math.ceil(vs0 / ss) * ss; sv <= vs1; sv += ss) ctx.fillText(sv === 0 ? "0" : `${sv > 0 ? "+" : "−"}${Math.abs(sv)}`, X(sv), pad.t + H + 7);
+  ctx.save(); ctx.translate(12, pad.t + H / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = `400 10.5px ${SANS}`; ctx.fillText("DEPTH BELOW COLLAR (m)", 0, 0); ctx.restore();
+  const az = sectionAz(v.cur);
+  ctx.font = `500 11px ${MONO}`; ctx.fillStyle = C.text2; ctx.textBaseline = "bottom";
+  ctx.textAlign = "left"; ctx.fillText(`A   ${compass(az + 180)}`, pad.l, pad.t - 6);
+  ctx.textAlign = "right"; ctx.fillText(`${compass(az)}   A′`, pad.l + W, pad.t - 6);
+  ctx.textAlign = "center"; ctx.fillStyle = C.text3; ctx.font = `400 10.5px ${MONO}`;
+  ctx.fillText("ALONG SECTION FROM COLLAR (m)", pad.l + W / 2, pad.t - 6);
 }
-
+function label(ctx, x, y, text, color) {
+  ctx.font = `500 11px ${MONO}`; const tw = ctx.measureText(text).width;
+  ctx.fillStyle = "rgba(15,20,26,.86)"; ctx.fillRect(x - 5, y - 9, tw + 10, 18);
+  ctx.fillStyle = color; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(text, x, y + .5);
+}
 function drawRig(ctx, x, y, dip, active) {
-  const t = performance.now() / 1000;
-  ctx.save(); ctx.translate(x, y);
-  const lean = (90 - Math.abs(dip)) * Math.PI / 180;
-  ctx.rotate(lean);
-  ctx.strokeStyle = "#cfd8e3"; ctx.fillStyle = "#cfd8e3"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(0, -38); ctx.lineTo(9, 0); ctx.stroke();   // mast
-  for (let k = 1; k < 4; k++) { const yy = -k * 9.5, hw = 9 - k * 2.3;
-    ctx.beginPath(); ctx.moveTo(-hw, yy); ctx.lineTo(hw, yy); ctx.stroke(); }
-  const head = active ? -30 + 4 * Math.sin(t * 9) : -30;
-  ctx.fillStyle = active ? css("--accent") : "#8a9bb3"; ctx.fillRect(-4, head, 8, 6);
+  ctx.save(); ctx.translate(Math.round(x) + .5, Math.round(y));
+  ctx.rotate((90 - Math.abs(dip)) * Math.PI / 180);
+  ctx.strokeStyle = active ? C.teal : C.text2; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(0, -30); ctx.lineTo(6, 0);
+  for (let k = 1; k <= 3; k++) { const yy = -k * 7.5, hw = 6 - k * 1.5; ctx.moveTo(-hw, yy); ctx.lineTo(hw, yy); }
+  ctx.stroke();
   ctx.restore();
-  ctx.fillStyle = "#1c2a3f"; ctx.fillRect(x - 20, y - 2, 40, 5);   // pad
-  if (active) for (let k = 0; k < 6; k++) {                          // dust
-    const a = (t * 1.7 + k / 6) % 1, dx = (k % 2 ? 1 : -1) * (6 + a * 22);
-    ctx.fillStyle = `rgba(207,216,227,${0.35 * (1 - a)})`;
-    ctx.beginPath(); ctx.arc(x + dx, y - 3 - a * 10, 2 + a * 3, 0, 7); ctx.fill();
-  }
+  ctx.fillStyle = active ? C.teal : C.text2; ctx.fillRect(Math.round(x) - 9, Math.round(y) - 1, 18, 2);
 }
 
+// ---------- plan ----------
 function drawPlan(v) {
   const { ctx, w, h } = fit($("plan"));
   ctx.clearRect(0, 0, w, h);
-  const s = section;
   const xs = S.candidates.map(c => c[1]), ys = S.candidates.map(c => c[2]);
-  let x0 = Math.min(...xs) - 80, x1 = Math.max(...xs) + 80, y0 = Math.min(...ys) - 80, y1 = Math.max(...ys) + 80;
-  const sc = Math.min(w / (x1 - x0), h / (y1 - y0));
-  const ox = (w - (x1 - x0) * sc) / 2, oy = (h - (y1 - y0) * sc) / 2;
-  const X = (x) => ox + (x - x0) * sc, Y = (y) => h - oy - (y - y0) * sc;
-  ctx.fillStyle = "#0d1a2b"; ctx.fillRect(X(x0), Y(y1), (x1 - x0) * sc, (y1 - y0) * sc);
-  if (s && s.planImg) {
-    const p = s.plan; ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(s.planImg, X(p.x[0]), Y(p.y[1]), (p.x[1] - p.x[0]) * sc, (p.y[1] - p.y[0]) * sc);
+  const x0 = Math.min(...xs) - 100, x1 = Math.max(...xs) + 100, y0 = Math.min(...ys) - 100, y1 = Math.max(...ys) + 100;
+  const pad = { l: 34, r: 6, t: 6, b: 20 };
+  const sc = Math.min((w - pad.l - pad.r) / (x1 - x0), (h - pad.t - pad.b) / (y1 - y0));
+  const ox = pad.l + ((w - pad.l - pad.r) - (x1 - x0) * sc) / 2, oy = pad.t + ((h - pad.t - pad.b) - (y1 - y0) * sc) / 2;
+  const X = (x) => ox + (x - x0) * sc, Y = (y) => h - pad.b - (oy - pad.t) - (y - y0) * sc;
+  const fx0 = X(x0), fy0 = Y(y1), fw = (x1 - x0) * sc, fh = (y1 - y0) * sc;
+  ctx.fillStyle = C.ground; ctx.fillRect(fx0, fy0, fw, fh);
+  ctx.save(); ctx.beginPath(); ctx.rect(fx0, fy0, fw, fh); ctx.clip();
+  const s = section;
+  if (s && s.planField) {
+    const p = s.plan, n = p.plan[0].length - 1, m = p.plan.length - 1;
+    drawField(ctx, s.planField, (j) => X(p.x[0] + j / n * (p.x[1] - p.x[0])), (i) => Y(p.y[0] + i / m * (p.y[1] - p.y[0])));
   }
-  // no-go zones
-  ctx.setLineDash([4, 4]); ctx.strokeStyle = "rgba(255,93,108,.8)"; ctx.lineWidth = 1.2;
+  // coordinate grid
+  ctx.strokeStyle = C.grid; ctx.beginPath();
+  for (let gx = Math.ceil(x0 / 500) * 500; gx <= x1; gx += 500) { ctx.moveTo(Math.round(X(gx)) + .5, fy0); ctx.lineTo(Math.round(X(gx)) + .5, fy0 + fh); }
+  for (let gy = Math.ceil(y0 / 500) * 500; gy <= y1; gy += 500) { ctx.moveTo(fx0, Math.round(Y(gy)) + .5); ctx.lineTo(fx0 + fw, Math.round(Y(gy)) + .5); }
+  ctx.stroke();
+  // no-go zones: hatched
+  ctx.strokeStyle = "rgba(201,112,95,.55)"; ctx.lineWidth = 1;
   for (const z of S.no_go) {
-    ctx.beginPath();
+    ctx.save(); ctx.beginPath();
     if (z.kind === "rect") ctx.rect(X(z.x_min), Y(z.y_max), (z.x_max - z.x_min) * sc, (z.y_max - z.y_min) * sc);
     else ctx.arc(X(z.x), Y(z.y), z.radius * sc, 0, 7);
-    ctx.stroke();
+    ctx.stroke(); ctx.clip();
+    ctx.beginPath(); for (let k = -h; k < w + h; k += 6) { ctx.moveTo(k, 0); ctx.lineTo(k + h, h); } ctx.globalAlpha = .45; ctx.stroke();
+    ctx.restore();
   }
-  ctx.setLineDash([]);
-  ctx.fillStyle = "rgba(138,155,179,.35)";
-  for (const [, x, y] of S.candidates) { ctx.fillRect(X(x) - 0.8, Y(y) - 0.8, 1.6, 1.6); }
-  ctx.strokeStyle = "rgba(230,237,246,.75)"; ctx.lineWidth = 1;
-  for (const [x, y] of S.seed_collars) { ctx.beginPath(); ctx.arc(X(x), Y(y), 2.6, 0, 7); ctx.stroke(); }
+  ctx.fillStyle = "rgba(111,122,136,.45)";
+  for (const [, x, y] of S.candidates) ctx.fillRect(Math.round(X(x)), Math.round(Y(y)), 1, 1);
+  ctx.strokeStyle = C.text2; ctx.lineWidth = 1;
+  for (const [x, y] of S.seed_collars) { ctx.beginPath(); ctx.arc(X(x), Y(y), 2.2, 0, 7); ctx.stroke(); }
   for (const r of v.recs) {
     if (r.x == null) continue;
-    const ore = r.ore_m > 0;
-    ctx.fillStyle = ore ? css("--ore") : css("--waste");
-    ctx.beginPath(); ctx.arc(X(r.x), Y(r.y), ore ? 3 + Math.min(5, Math.sqrt(r.ore_m) / 2) : 3, 0, 7); ctx.fill();
+    if (r.ore_m > 0) { ctx.fillStyle = C.goldHi; const q = 2.5 + Math.min(3.5, Math.sqrt(r.ore_m) / 2.5); ctx.fillRect(X(r.x) - q, Y(r.y) - q, 2 * q, 2 * q); }
+    else { ctx.fillStyle = C.waste; ctx.fillRect(X(r.x) - 2, Y(r.y) - 2, 4, 4); }
   }
   if (v.cur) {
-    const az = (Math.abs(v.cur.dip) >= 89 ? 90 : v.cur.azimuth) * Math.PI / 180;
-    const ux = Math.sin(az), uy = Math.cos(az);
-    ctx.strokeStyle = "rgba(63,182,255,.7)"; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.3;
-    ctx.beginPath(); ctx.moveTo(X(v.cur.x - 450 * ux), Y(v.cur.y - 450 * uy));
-    ctx.lineTo(X(v.cur.x + 450 * ux), Y(v.cur.y + 450 * uy)); ctx.stroke(); ctx.setLineDash([]);
-    const t = performance.now() / 1000, rr = 6 + 5 * ((t * 1.2) % 1);
-    ctx.strokeStyle = `rgba(63,182,255,${1 - ((t * 1.2) % 1)})`; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(X(v.cur.x), Y(v.cur.y), rr, 0, 7); ctx.stroke();
-    ctx.fillStyle = css("--accent"); ctx.beginPath(); ctx.arc(X(v.cur.x), Y(v.cur.y), 4, 0, 7); ctx.fill();
+    const az = sectionAz(v.cur) * Math.PI / 180, ux = Math.sin(az), uy = Math.cos(az);
+    const ax = X(v.cur.x - 450 * ux), ay = Y(v.cur.y - 450 * uy), bx = X(v.cur.x + 450 * ux), by = Y(v.cur.y + 450 * uy);
+    ctx.strokeStyle = C.teal; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); ctx.setLineDash([]);
+    ctx.font = `500 10.5px ${MONO}`; ctx.fillStyle = C.teal; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("A", ax - 8 * ux, ay + 8 * uy); ctx.fillText("A′", bx + 9 * ux, by - 9 * uy);
+    const cx = X(v.cur.x), cy = Y(v.cur.y);
+    ctx.strokeStyle = C.teal; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, 6, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx - 10, cy); ctx.lineTo(cx - 7, cy); ctx.moveTo(cx + 7, cy); ctx.lineTo(cx + 10, cy);
+    ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy - 7); ctx.moveTo(cx, cy + 7); ctx.lineTo(cx, cy + 10); ctx.stroke();
   }
-  // scale bar
-  ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--muted"); ctx.font = "11px Segoe UI, system-ui";
-  const bx = 14, by = h - 14; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 500 * sc, by); ctx.stroke();
-  ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText("500 m", bx, by - 3);
-  ctx.textAlign = "right"; ctx.fillText("N ↑", w - 10, 18);
+  ctx.restore();
+  ctx.strokeStyle = C.rule; ctx.strokeRect(Math.round(fx0) + .5, Math.round(fy0) + .5, Math.round(fw) - 1, Math.round(fh) - 1);
+  // axes: local coordinates
+  ctx.font = `400 10px ${MONO}`; ctx.fillStyle = C.text3;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let gx = Math.ceil(x0 / 500) * 500; gx <= x1; gx += 500) ctx.fillText(`${gx}E`, X(gx), fy0 + fh + 5);
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let gy = Math.ceil(y0 / 500) * 500; gy <= y1; gy += 500) ctx.fillText(`${gy}N`, fx0 - 5, Y(gy));
+  // north + scale
+  const nxp = fx0 + fw - 16, nyp = fy0 + 14;
+  ctx.strokeStyle = C.text2; ctx.beginPath(); ctx.moveTo(nxp, nyp + 16); ctx.lineTo(nxp, nyp); ctx.lineTo(nxp - 3, nyp + 5); ctx.moveTo(nxp, nyp); ctx.lineTo(nxp + 3, nyp + 5); ctx.stroke();
+  ctx.fillStyle = C.text2; ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillText("N", nxp, nyp + 19);
+  const sbx = fx0 + 10, sby = fy0 + fh - 12;
+  ctx.strokeStyle = C.text2; ctx.beginPath(); ctx.moveTo(sbx, sby - 3); ctx.lineTo(sbx, sby); ctx.lineTo(sbx + 250 * sc, sby); ctx.lineTo(sbx + 250 * sc, sby - 3); ctx.stroke();
+  ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText("250 m", sbx + 250 * sc + 6, sby + 4);
 }
 
+// ---------- discovery curve ----------
+function drawChart(v) {
+  const { ctx, w, h } = fit($("chart"));
+  ctx.clearRect(0, 0, w, h);
+  const pad = { l: 34, r: 74, t: 8, b: 20 };
+  const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
+  const mine = v.recs.map(r => [r.kpis.metres || 0, r.kpis.new_ore_mt || 0]);
+  const last = mine.length ? mine[mine.length - 1] : [0, 0];
+  const xMax = Math.max(2000, last[0] * 1.25);
+  const b = S.baseline;
+  const base = b ? b.metres.map((m, i) => [m, b.blocks[i] * S.block_t / 1e6]).filter(p => p[0] <= xMax) : [];
+  const yMax = Math.max(1, last[1], ...base.map(p => p[1])) * 1.12;
+  const X = (x) => pad.l + x / xMax * W, Y = (y) => pad.t + H - y / yMax * H;
+  ctx.font = `400 10px ${MONO}`; ctx.fillStyle = C.text3; ctx.strokeStyle = C.grid;
+  const yStep = [0.5, 1, 2, 5, 10, 20, 50].find(s => yMax / s <= 4) || 100;
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let y = 0; y <= yMax; y += yStep) { ctx.beginPath(); ctx.moveTo(pad.l, Math.round(Y(y)) + .5); ctx.lineTo(pad.l + W, Math.round(Y(y)) + .5); ctx.stroke(); ctx.fillText(fmt(y, yStep < 1 ? 1 : 0), pad.l - 6, Y(y)); }
+  const xStep = [500, 1000, 2500, 5000, 10000].find(s => xMax / s <= 5) || 20000;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let x = 0; x <= xMax; x += xStep) ctx.fillText(x ? `${fmt(x / 1000, x % 1000 ? 1 : 0)}k` : "0 m", X(x), pad.t + H + 5);
+  const line = (pts, color, dash) => { ctx.setLineDash(dash || []); ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); for (const [x, y] of pts) ctx.lineTo(X(x), Y(y)); ctx.stroke(); ctx.setLineDash([]); };
+  if (base.length) line(base, C.text3, [3, 3]);
+  if (mine.length) line(mine, C.teal);
+  ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = `500 10.5px ${SANS}`;
+  if (base.length) { const p = base[base.length - 1]; ctx.fillStyle = C.text3; ctx.fillText("Rule of thumb", X(p[0]) + 6, Y(p[1])); }
+  if (mine.length) { ctx.fillStyle = C.teal; ctx.beginPath(); ctx.arc(X(last[0]), Y(last[1]), 2.5, 0, 7); ctx.fill();
+    ctx.fillText("Planner", X(last[0]) + 6, Y(last[1])); }
+}
+
+// ---------- panels ----------
 function kpisNow(v) {
   const last = v.recs.length ? v.recs[v.recs.length - 1].kpis : null;
   if (v.live && state.opc && state.opc["Kpi.Holes"] > (last ? last.holes : 0) && !REPLAY) {
@@ -461,79 +593,71 @@ function kpisNow(v) {
   }
   return last || { holes: 0, metres: 0, ore_m: 0, new_ore_mt: 0, new_cu_kt: 0, drill_cost_aud_m: 0 };
 }
-
-function drawKpis(k) {
-  const saved = k.cost_saved_aud_m;
-  const tiles = [
-    ["Holes drilled", fmt(k.holes), "", `${fmt(k.metres)} m of core`],
-    ["Drilling spend", `A$${fmt(k.drill_cost_aud_m, 2)}`, "M", `at A$${fmt(S.drill_cost_aud_per_m, 0)}/m all-in`],
-    ["Ore intercepted", fmt(k.ore_m), "m", `${k.metres ? fmt(100 * k.ore_m / k.metres, 0) : "–"}% of metres in ore`],
-    ["New ore found", fmt(k.new_ore_mt, 1), "Mt", `≈ ${fmt(k.new_cu_kt, 0)} kt contained Cu`, "ore"],
-    ["Rule of thumb needs", fmt(k.baseline_metres), "m", "to find the same new ore"],
-    ["Saved vs rule of thumb", saved == null ? "–" : `${saved < 0 ? "−" : ""}A$${fmt(Math.abs(saved), 2)}`, saved == null ? "" : "M",
-      k.metres_saved == null ? "no baseline for this much ore" : k.metres_saved >= 0 ? `${fmt(k.metres_saved)} fewer metres`
-        : `${fmt(-k.metres_saved)} m behind so far`, "hero"],
-  ];
-  setHTML("kpis", tiles.map(([l, v, u, s, cls]) =>
-    `<div class="kpi ${cls || ""}"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div><div class="s">${s}</div></div>`).join(""));
+function cell(l, v, u, s, cls = "") {
+  return `<div class="cell ${cls}"><div class="l">${l}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div><div class="s">${s}</div></div>`;
 }
-
-function drawChart(v) {
-  const { ctx, w, h } = fit($("chart"));
-  ctx.clearRect(0, 0, w, h);
-  const pad = { l: 40, r: 10, t: 8, b: 22 };
-  const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
-  const mine = v.recs.map(r => [r.kpis.metres || 0, r.kpis.new_ore_mt || 0]);
-  const b = S.baseline;
-  const xMax = Math.max(2000, ...(mine.length ? [mine[mine.length - 1][0] * 1.15] : [0]));
-  const base = b ? b.metres.map((m, i) => [m, b.blocks[i] * S.block_t / 1e6]).filter(p => p[0] <= xMax) : [];
-  const yMax = Math.max(1, ...mine.map(p => p[1]), ...base.map(p => p[1])) * 1.1;
-  const X = (x) => pad.l + x / xMax * W, Y = (y) => pad.t + H - y / yMax * H;
-  ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.fillStyle = css("--muted"); ctx.font = "11px Segoe UI, system-ui";
-  ctx.textAlign = "right"; ctx.textBaseline = "middle";
-  const yStep = yMax > 40 ? 20 : yMax > 10 ? 5 : 1;
-  for (let y = 0; y <= yMax; y += yStep) { ctx.beginPath(); ctx.moveTo(pad.l, Y(y)); ctx.lineTo(pad.l + W, Y(y)); ctx.stroke(); ctx.fillText(`${y} Mt`, pad.l - 5, Y(y)); }
-  ctx.textAlign = "center"; ctx.textBaseline = "top";
-  const xStep = xMax > 20000 ? 10000 : xMax > 8000 ? 2500 : 1000;
-  for (let x = 0; x <= xMax; x += xStep) ctx.fillText(`${fmt(x / 1000, x % 1000 ? 1 : 0)}k m`, X(x), pad.t + H + 6);
-  const line = (pts, color, dash) => { if (!pts.length) return; ctx.setLineDash(dash || []); ctx.strokeStyle = color; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); for (const [x, y] of pts) ctx.lineTo(X(x), Y(y)); ctx.stroke(); ctx.setLineDash([]); };
-  line(base, "#8a9bb3", [5, 4]);
-  line(mine, css("--accent"));
-  if (mine.length) { const [x, y] = mine[mine.length - 1]; ctx.fillStyle = css("--accent"); ctx.beginPath(); ctx.arc(X(x), Y(y), 3.5, 0, 7); ctx.fill(); }
+function drawPanel(k) {
+  const saved = k.cost_saved_aud_m, ms = k.metres_saved;
+  const savedCls = saved == null ? "" : saved >= 0 ? "pos" : "neg";
+  const html =
+    `<div class="group"><div class="eyebrow">Programme</div><div class="cells">` +
+      cell("Holes drilled", fmt(k.holes), "", `${fmt(k.metres)} m core`) +
+      cell("Drilling spend", `${fmt(k.drill_cost_aud_m, 2)}`, "A$M", `${fmt(S.drill_cost_aud_per_m, 2)} A$/m all-in`) +
+    `</div></div>` +
+    `<div class="group"><div class="eyebrow">Discovery</div><div class="cells">` +
+      cell("Ore intercepted", fmt(k.ore_m), "m", `${k.metres ? fmt(100 * k.ore_m / k.metres, 0) : "–"}% of metres in ore`) +
+      cell("New ore found", fmt(k.new_ore_mt, 1), "Mt", `${fmt(k.new_cu_kt, 1)} kt contained Cu`, "ore") +
+    `</div></div>` +
+    `<div class="group"><div class="eyebrow">Against rule of thumb</div><div class="cells">` +
+      cell("Rule of thumb needs", fmt(k.baseline_metres), "m", "for the same new ore") +
+      cell("Saved", saved == null ? "–" : sgn(saved, 2), saved == null ? "" : "A$M",
+        ms == null ? "baseline has no match" : ms >= 0 ? `${fmt(ms)} m fewer` : `${fmt(-ms)} m behind so far`, savedCls) +
+    `</div></div>`;
+  setHTML("panel", html);
+  setHTML("chartKv", `<span class="mono">${fmt(k.new_ore_mt, 1)} Mt vs ${k.baseline_metres == null ? "–" : fmt(k.baseline_metres) + " m"} for the rule of thumb</span>`);
 }
-
-function drawPipeline(v) {
-  const chips = STAGES.map((name, i) => {
+function drawSteps(v) {
+  const html = STAGES.map((name, i) => {
     let cls = "";
     if (v.stage >= 0) cls = i < v.stage ? "done" : i === v.stage ? (v.bad ? "bad" : "active") : "";
-    return `<div class="chip ${cls}"><i></i>${name}</div>`;
-  });
-  setHTML("pipeline", chips.join('<span class="arrow">›</span>'));
-  const c = $("conn");
-  c.className = "conn" + (state && state.opc ? " on" : "");
-  c.querySelector("span").textContent = REPLAY ? "Replay of saved run" : state && state.opc ? "OPC UA: connected" : "OPC UA: offline (run folder only)";
+    return `<div class="step ${cls}"><span class="n">${String(i + 1).padStart(2, "0")}</span>${name}</div>`;
+  }).join("") +
+    `<div class="req mono"><span><em>REQ</em>${v.req ? String(v.req).padStart(4, "0") : "–"}</span>` +
+    `<span><em>HOLE</em>${v.cur ? v.cur.hole_id : "–"}</span></div>`;
+  setHTML("steps", html);
+  const l = $("link");
+  l.className = "link" + (state && state.opc ? " on" : "");
+  l.querySelector("span").textContent = REPLAY ? "Replay of saved run" : state && state.opc ? "OPC UA connected" : "OPC UA offline · run folder";
 }
-
+function drawHoleKv(v) {
+  if (!v.cur) return;
+  const c = v.cur, planned = Math.min(c.depth, S.max_depth_m);
+  setHTML("holeKv",
+    `<span class="hole">${c.hole_id}</span>` +
+    `<span><em>Collar</em>${fmt(c.x)}E ${fmt(c.y)}N ${fmt(c.z, 0)} RL</span>` +
+    `<span><em>Az</em>${fmt(c.azimuth, 1)}°</span><span><em>Dip</em>${sgn(c.dip, 1)}°</span>` +
+    `<span><em>Planned</em>${fmt(planned)} m</span><span><em>Depth</em>${fmt(depthShown, 1)} m</span>`);
+}
 function drawTable(v) {
-  const rows = v.recs.slice(-9).reverse().map(r => {
+  const cut = S.cutoff_pct;
+  const rows = v.recs.slice(-6).reverse().map(r => {
     const ore = r.ore_m > 0;
-    return `<tr><td>${r.iteration}</td><td>${r.hole_id}</td><td class="n">${fmt(r.metres)}</td><td class="n">${fmt(r.ore_m)}</td>
-      <td><span class="tag ${ore ? "ore" : "waste"}">${ore ? "ore" : "waste"}</span></td></tr>`;
+    return `<tr><td>${String(r.iteration).padStart(2, "0")}</td><td>${r.hole_id}</td><td class="r">${fmt(r.metres)}</td>` +
+      `<td class="r">${fmt(r.ore_m)}</td><td class="r">${r.mean_cu == null ? "–" : fmt(r.mean_cu, 2)}</td>` +
+      `<td class="${ore ? "res-ore" : "res-waste"}">${ore ? "Ore" : "Waste"}</td></tr>`;
   });
   if (v.cur && !v.recs.some(r => r.hole_idx === v.cur.hole_idx))
-    rows.unshift(`<tr class="cur"><td>›</td><td>${v.cur.hole_id}</td><td class="n">${fmt(depthShown)}</td><td class="n">…</td><td>drilling</td></tr>`);
-  setHTML("holes", rows.join(""));
+    rows.unshift(`<tr class="cur"><td>··</td><td>${v.cur.hole_id}</td><td class="r">${fmt(depthShown)}</td><td class="r">–</td><td class="r">–</td><td>Drilling</td></tr>`);
+  setHTML("holes", rows.join("") || `<tr><td colspan="6" style="color:${C.text3}">No holes yet</td></tr>`);
 }
 
 // ---------- replay clock ----------
-function stepReplay(v, dt) {
+function stepReplay(dt) {
   const recs = state ? state.records.filter(r => r.metres > 0) : [];
   if (!recs.length) return;
   const r = recs[Math.min(replay.i, recs.length - 1)];
-  const mps = 40 * SPEED;
   if (replay.phase === "drill") {
-    replay.depth = Math.min(r.metres, replay.depth + mps * dt);
+    replay.depth = Math.min(r.metres, replay.depth + 40 * SPEED * dt);
     if (replay.depth >= r.metres) { replay.phase = "assay"; replay.t0 = performance.now(); }
   } else if (replay.phase === "assay" && performance.now() - replay.t0 > 1600 / SPEED) {
     replay.phase = "learn"; replay.t0 = performance.now();
@@ -543,30 +667,29 @@ function stepReplay(v, dt) {
 }
 
 // ---------- main loop ----------
-let last = performance.now();
+let lastT = performance.now();
 function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
   if (S && state) {
-    if (REPLAY) stepReplay(null, dt);
+    if (REPLAY) stepReplay(dt);
     const v = view();
     ensureSection(v);
-    if (v.cur) {
-      const t = `${v.cur.hole_id} <em>· azimuth ${fmt(v.cur.azimuth)}° · dip ${fmt(v.cur.dip)}° · planned ${fmt(Math.min(v.cur.depth, S.max_depth_m))} m</em>`;
-      setHTML("secTitle", t);
-    }
-    $("runname").textContent = `Hillside Cu-Au · ${state.run || "no run yet"}`;
-    drawSection(v, dt); drawPlan(v); drawChart(v); drawPipeline(v); drawTable(v); drawKpis(kpisNow(v));
+    $("run").textContent = state.run || "–";
+    drawSection(v, dt); drawPlan(v); drawChart(v);
+    drawSteps(v); drawHoleKv(v); drawTable(v); drawPanel(kpisNow(v));
   }
   requestAnimationFrame(frame);
 }
 
 (async function init() {
-  while (!S) {   // the server may still be starting
+  while (!S) {
     try { S = await getJSON("/api/static"); } catch (e) { await new Promise(r => setTimeout(r, 1000)); }
   }
-  $("cut").textContent = S.cutoff_pct;
-  $("assume").textContent = `Indicative: new ore = 25 × 25 × 10 m blocks first reached by an assayed ore sample, ${S.density_t_m3} t/m³ assumed; ` +
-    `drilling A$${S.drill_cost_aud_per_m}/m (IBISWorld 2025–26). Rule of thumb = drill the hole with most trace near known ore.`;
+  $("cutoff").textContent = `${S.cutoff_pct}% Cu`;
+  $("bands").innerHTML = BANDS.slice(1).map(([t, c]) => `<i style="background:rgb(${c.join(",")})"></i>`).join("") +
+    `<b>${BANDS[1][0]}</b><b>→</b><b>${BANDS[BANDS.length - 1][0]}+</b>`;
+  $("assume").textContent = `Indicative. New ore: 25 × 25 × 10 m blocks first reached by an assayed ore sample, ${S.density_t_m3} t/m³ assumed. ` +
+    `Drilling at A$${S.drill_cost_aud_per_m}/m all-in (IBISWorld 2025–26). Rule of thumb: drill the hole with the most trace near known ore.`;
   poll();
   requestAnimationFrame(frame);
 })();
