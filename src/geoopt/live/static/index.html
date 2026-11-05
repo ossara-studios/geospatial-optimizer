@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drill Planner Live</title>
+<style>
+  :root {
+    --bg: #0a0f17;
+    --panel: #111927;
+    --panel-2: #162133;
+    --line: #22324a;
+    --text: #e6edf6;
+    --muted: #8a9bb3;
+    --faint: #56677f;
+    --accent: #3fb6ff;
+    --ore: #f5b83d;
+    --ore-hot: #ff7a3d;
+    --waste: #4a5a72;
+    --ok: #3ddc97;
+    --warn: #f5b83d;
+    --bad: #ff5d6c;
+    --radius: 12px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .wrap { max-width: 1600px; margin: 0 auto; padding: 16px 20px 24px; }
+  header { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin-bottom: 14px; }
+  .brand { display: flex; flex-direction: column; min-width: 220px; }
+  .brand b { font-size: 18px; letter-spacing: .2px; }
+  .brand span { color: var(--muted); font-size: 12px; }
+  .pipeline { display: flex; gap: 6px; flex: 1; flex-wrap: wrap; justify-content: center; }
+  .chip { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--muted); font-size: 12.5px;
+    transition: all .25s; }
+  .chip i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .chip.done { color: var(--text); }
+  .chip.done i { background: var(--ok); }
+  .chip.active { color: var(--text); border-color: var(--accent); background: #12263b;
+    box-shadow: 0 0 0 3px rgba(63,182,255,.12); }
+  .chip.active i { background: var(--accent); animation: pulse 1s infinite; }
+  .chip.bad { border-color: var(--bad); color: var(--text); }
+  .chip.bad i { background: var(--bad); }
+  .arrow { color: var(--faint); align-self: center; font-size: 12px; }
+  .conn { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .conn i { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .conn.on i { background: var(--ok); }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(340px, 1fr); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 16px; min-width: 0; }
+  .card h2 { margin: 0 0 2px; font-size: 13px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .6px; }
+  .card .sub { color: var(--text); font-size: 15px; margin-bottom: 8px; }
+  .card .sub em { font-style: normal; color: var(--muted); }
+  canvas { display: block; width: 100%; }
+  #section { aspect-ratio: 16 / 9.2; }
+  #plan { aspect-ratio: 1 / 1.18; }
+  #chart { aspect-ratio: 16 / 5; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px;
+    margin-top: 8px; align-items: center; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .ramp { width: 90px; height: 10px; border-radius: 3px;
+    background: linear-gradient(90deg, #0d1a2b, #13405a, #1f7a8c, #f5b83d, #ff7a3d); }
+  .side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 14px; min-width: 0; }
+  .kpi .l { color: var(--muted); font-size: 12px; }
+  .kpi .v { font-size: 26px; font-weight: 650; letter-spacing: -.3px; margin-top: 2px;
+    font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kpi .v small { font-size: 14px; color: var(--muted); font-weight: 500; margin-left: 3px; }
+  .kpi .s { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .kpi.hero { background: linear-gradient(160deg, #1a2a17 0%, var(--panel) 70%); border-color: #2f4a2a; }
+  .kpi.hero .v { color: var(--ok); }
+  .kpi.ore .v { color: var(--ore); }
+  .note { color: var(--faint); font-size: 11.5px; margin-top: 8px; }
+
+  .holes { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .holes th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px;
+    border-bottom: 1px solid var(--line); }
+  .holes td { padding: 5px 6px; border-bottom: 1px solid #18243a; }
+  .holes td.n { text-align: right; }
+  .holes tr.cur td { color: var(--accent); }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; }
+  .tag.ore { background: rgba(245,184,61,.15); color: var(--ore); }
+  .tag.waste { background: rgba(138,155,179,.12); color: var(--muted); }
+
+  .bottom { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(340px, 1fr); gap: 14px;
+    margin-top: 14px; }
+  @media (max-width: 1100px) {
+    .grid, .bottom { grid-template-columns: 1fr; }
+    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 12px 16px; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .arrow { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><b>Adaptive drill planner</b><span id="runname">Hillside Cu-Au · waiting for a run</span></div>
+    <div class="pipeline" id="pipeline"></div>
+    <div class="conn" id="conn"><i></i><span>OPC UA: offline</span></div>
+  </header>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Live section</h2>
+      <div class="sub" id="secTitle">Waiting for the first recommendation…</div>
+      <canvas id="section"></canvas>
+      <div class="legend">
+        <span><span class="ramp"></span>Model: chance of ore (Cu &gt; <b id="cut">0.2</b>%)</span>
+        <span><span class="sw" style="background:var(--ore)"></span>Assayed ore</span>
+        <span><span class="sw" style="background:var(--waste)"></span>Assayed waste</span>
+        <span><span class="sw" style="background:var(--accent)"></span>Hole being drilled</span>
+      </div>
+    </div>
+    <div class="side">
+      <div class="card">
+        <h2>Plan view</h2>
+        <div class="sub"><em>Best chance of ore at any depth · drilled collars</em></div>
+        <canvas id="plan"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="side">
+      <div class="card">
+        <h2>New ore found vs metres drilled</h2>
+        <canvas id="chart"></canvas>
+        <div class="legend">
+          <span><span class="sw" style="background:var(--accent)"></span>Adaptive planner (this run)</span>
+          <span><span class="sw" style="background:#8a9bb3"></span>Drill beside known ore (rule of thumb)</span>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Holes</h2>
+      <table class="holes"><thead><tr><th>#</th><th>Hole</th><th class="n">Metres</th>
+        <th class="n">Ore m</th><th>Result</th></tr></thead><tbody id="holes"></tbody></table>
+      <div class="note" id="assume"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const REPLAY = params.has("replay");
+const SPEED = parseFloat(params.get("speed") || "1");
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const STAGES = ["Recommend", "Limit check", "Operator approval", "Drilling", "Assays", "Model update"];
+
+let S = null;          // /api/static
+let state = null;      // latest /api/state
+let section = null, prevSection = null, fadeT = 1;
+const cam = {};       // section view window, eased
+let sectionKey = "";
+let depthShown = 0, depthTarget = 0, depthTime = 0, drilling = false;
+let revealT = 0;       // assay reveal progress 0..1
+let replay = { i: 0, phase: "drill", t0: 0, depth: 0 };
+
+// ---------- helpers ----------
+function fit(canvas) {
+  const r = canvas.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(r.width * d)), h = Math.max(1, Math.round(r.height * d));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  return { ctx, w: r.width, h: r.height };
+}
+const RAMP = [[0, [13, 26, 43]], [0.25, [19, 64, 90]], [0.5, [31, 122, 140]], [0.75, [245, 184, 61]], [1, [255, 122, 61]]];
+function ramp(p) {
+  p = Math.max(0, Math.min(1, (p - 0.08) / 0.72));   // background odds (~0.15) stay dark
+  for (let k = 1; k < RAMP.length; k++) {
+    if (p <= RAMP[k][0]) {
+      const [a, ca] = RAMP[k - 1], [b, cb] = RAMP[k], t = (p - a) / (b - a);
+      return ca.map((c, j) => Math.round(c + (cb[j] - c) * t));
+    }
+  }
+  return RAMP[RAMP.length - 1][1];
+}
+function raster(rows) {           // 2D array of P(ore) -> offscreen canvas
+  const h = rows.length, w = rows[0].length, c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const ctx = c.getContext("2d"), img = ctx.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const [r, g, b] = ramp(rows[y][x]), o = 4 * (y * w + x);
+    img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+const fmt = (v, d = 0) => v == null || !isFinite(v) ? "–" : v.toLocaleString("en-AU", { maximumFractionDigits: d, minimumFractionDigits: d });
+const htmlCache = {};
+function setHTML(id, html) { if (htmlCache[id] !== html) { htmlCache[id] = html; $(id).innerHTML = html; } }
+async function getJSON(u) { const r = await fetch(u, { cache: "no-store" }); return r.json(); }
+
+// ---------- data flow ----------
+function view() {
+  // What to show now: live (OPC UA) or replaying the run folder's records.
+  const recs = state ? state.records.filter(r => r.metres > 0) : [];
+  if (REPLAY) {
+    const i = Math.min(replay.i, Math.max(0, recs.length - 1));
+    const r = recs[i];
+    return { recs: recs.slice(0, replay.phase === "drill" ? i : i + 1), cur: r,
+             iter: r ? (replay.phase === "learn" ? r.iteration : r.iteration - 1) : null,
+             stage: replay.phase === "drill" ? 3 : replay.phase === "assay" ? 4 : 5, live: false };
+  }
+  const opc = state && state.opc;
+  const cur = state && state.current;
+  let stage = -1, bad = false;
+  if (opc && opc["Rec.ReqId"] > 0) {
+    const R = opc["Rec.ReqId"];
+    if (opc["Chk.ReqId"] < R) stage = 1;
+    else if (opc["Chk.Status"] === 3) { stage = 1; bad = true; }
+    else if (opc["Appr.ReqId"] < R) stage = 2;
+    else if (opc["Appr.Decision"] === 2) { stage = 2; bad = true; }
+    else if (opc["Done.ReqId"] < R) stage = 3;
+    else stage = recs.length && recs[recs.length - 1].hole_idx === (cur && cur.hole_idx) ? 0 : 5;
+  }
+  const done = recs.some(r => cur && r.hole_idx === cur.hole_idx);
+  return { recs, cur: cur ? { ...cur, metres: done ? recs.find(r => r.hole_idx === cur.hole_idx).metres : null } : null,
+           iter: null, stage, bad, live: !!opc, done };
+}
+
+async function poll() {
+  try {
+    const q = params.get("run") ? `?run=${encodeURIComponent(params.get("run"))}` : "";
+    state = await getJSON("/api/state" + q);
+  } catch (e) { /* server restarting */ }
+  setTimeout(poll, REPLAY ? 1500 : 250);
+}
+
+async function ensureSection(v) {
+  const holeIdx = v.cur ? (v.cur.hole_idx) : null;
+  if (holeIdx == null) return;
+  const nIter = v.recs.length;          // model state after the holes drilled so far
+  const key = `${holeIdx}:${nIter}:${v.iter}`;
+  if (key === sectionKey) return;
+  sectionKey = key;
+  const q = new URLSearchParams({ hole: holeIdx });
+  if (v.iter != null) { q.set("iter", Math.max(1, v.iter)); q.set("upto", v.recs.length ? v.recs[v.recs.length - 1].iteration : 0); }
+  if (params.get("run")) q.set("run", params.get("run"));
+  const s = await getJSON("/api/section?" + q);
+  if (!s.ok) return;
+  if (s.p) s.img = raster(s.p);
+  if (s.plan) s.planImg = raster(s.plan.plan.slice().reverse());
+  prevSection = section; section = s; fadeT = 0;
+}
+
+// ---------- drawing ----------
+function holeGeom(cur) {
+  const dip = Math.abs(cur.dip) * Math.PI / 180;
+  return { ds: Math.cos(dip), dz: -Math.sin(dip) };   // per metre along hole, in section coords
+}
+
+function drawSection(v, dt) {
+  const { ctx, w, h } = fit($("section"));
+  ctx.clearRect(0, 0, w, h);
+  const s = section;
+  const pad = { l: 58, r: 14, t: 10, b: 30 };
+  const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
+  ctx.fillStyle = "#0d1a2b"; ctx.fillRect(pad.l, pad.t, W, H);
+  if (!s || !s.z || !v.cur) return;
+  const [s0, s1] = s.s, [zTop, zBot] = s.z;
+  // View window around the active hole, true scale (1 m across = 1 m down), eased between holes.
+  const gq = holeGeom(v.cur), plannedV = Math.min(v.cur.depth, S.max_depth_m);
+  const span = Math.max(300, plannedV * -gq.dz + 140);
+  const want = { top: v.cur.z + 0.12 * span, span, mid: plannedV * gq.ds / 2 };
+  if (!cam.win) cam.win = { ...want };
+  for (const k of ["top", "span", "mid"]) cam.win[k] += (want[k] - cam.win[k]) * Math.min(1, dt * 3);
+  const vz0 = cam.win.top, vz1 = vz0 - cam.win.span, sSpan = cam.win.span * W / H;
+  const vs0 = cam.win.mid - sSpan / 2, vs1 = cam.win.mid + sSpan / 2;
+  const X = (sv) => pad.l + (sv - vs0) / (vs1 - vs0) * W;
+  const Y = (zv) => pad.t + (vz0 - zv) / (vz0 - vz1) * H;
+  ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, W, H); ctx.clip();
+  ctx.fillStyle = "#0a121f"; ctx.fillRect(pad.l, pad.t, W, H);   // sky / outside the model
+  // background, cross-fading when the model updates
+  fadeT = Math.min(1, fadeT + dt / 0.9);
+  ctx.imageSmoothingEnabled = true;
+  const put = (img) => ctx.drawImage(img, X(s0), Y(zTop), X(s1) - X(s0), Y(zBot) - Y(zTop));
+  if (prevSection && prevSection.img && fadeT < 1 && prevSection.hole_idx === s.hole_idx) {
+    put(prevSection.img); ctx.globalAlpha = fadeT;
+  }
+  if (s.img) put(s.img);
+  ctx.globalAlpha = 1;
+  // ground surface at the collar
+  ctx.strokeStyle = "rgba(207,216,227,.35)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, Y(v.cur.z)); ctx.lineTo(pad.l + W, Y(v.cur.z)); ctx.stroke();
+  ctx.fillStyle = "#0a121f"; ctx.fillRect(pad.l, pad.t, W, Math.max(0, Y(v.cur.z) - pad.t));
+  // grid + axes
+  ctx.strokeStyle = "rgba(255,255,255,.06)";
+  const zs = cam.win.span > 500 ? 100 : 50, ss = sSpan > 900 ? 200 : 100;
+  for (let d = zs; v.cur.z - d >= vz1; d += zs) { const z = v.cur.z - d; ctx.beginPath(); ctx.moveTo(pad.l, Y(z)); ctx.lineTo(pad.l + W, Y(z)); ctx.stroke(); }
+  for (let sv = Math.ceil(vs0 / ss) * ss; sv <= vs1; sv += ss) { ctx.beginPath(); ctx.moveTo(X(sv), pad.t); ctx.lineTo(X(sv), pad.t + H); ctx.stroke(); }
+  ctx.restore();
+  ctx.fillStyle = css("--muted"); ctx.font = "11px Segoe UI, system-ui";
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let d = 0; v.cur.z - d >= vz1; d += zs) ctx.fillText(d ? `${d} m` : "surface", pad.l - 6, Y(v.cur.z - d));
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  for (let sv = Math.ceil(vs0 / ss) * ss; sv <= vs1; sv += ss)
+    ctx.fillText(sv === 0 ? "collar" : `${sv > 0 ? "+" : ""}${sv} m`, X(sv), pad.t + H + 8);
+  ctx.save(); ctx.beginPath(); ctx.rect(pad.l, pad.t, W, H); ctx.clip();
+  // nearby assayed samples (seed holes and earlier holes)
+  const cut = S.cutoff_pct;
+  for (const [sv, zv, cu] of s.samples) {
+    if (sv < s0 || sv > s1 || zv < zBot || zv > zTop) continue;
+    const ore = cu > cut;
+    ctx.fillStyle = ore ? "rgba(245,184,61,.95)" : "rgba(120,138,163,.45)";
+    ctx.beginPath(); ctx.arc(X(sv), Y(zv), ore ? 2.6 : 1.7, 0, 7); ctx.fill();
+  }
+  // the hole being drilled
+  const cur = v.cur, g = holeGeom(cur);
+  const planned = Math.min(cur.depth, S.max_depth_m);
+  let depth;
+  if (REPLAY) depth = replay.depth;
+  else if (v.cur.metres != null) depth = v.cur.metres;
+  else if (v.live && v.stage === 3) {
+    const opc = state.opc;
+    if (opc["Rig.ReqId"] === opc["Rec.ReqId"] && opc["Rig.State"] === 2) depth = opc["Rig.DepthDrilled"];
+    else if (opc["Rig.ReqId"] === opc["Rec.ReqId"] && opc["Rig.State"] === 1) {
+      if (opc["Rig.DepthDrilled"] !== depthTarget) { depthTarget = opc["Rig.DepthDrilled"]; depthTime = performance.now(); }
+      const extra = (performance.now() - depthTime) / 1000 * S.metres_per_second;
+      depth = Math.min(planned, depthTarget + extra);
+      drilling = true;
+    } else depth = 0;
+  } else depth = v.cur.metres != null ? v.cur.metres : (v.stage >= 1 && v.stage < 3 ? 0 : planned);
+  depthShown += (depth - depthShown) * Math.min(1, dt * 10);
+  if (depth < depthShown) depthShown = depth;
+  const cz = cur.z;
+  // planned path (dashed)
+  ctx.setLineDash([5, 5]); ctx.strokeStyle = "rgba(63,182,255,.45)"; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(X(0), Y(cz)); ctx.lineTo(X(planned * g.ds), Y(cz + planned * g.dz)); ctx.stroke();
+  ctx.setLineDash([]);
+  // assays (revealed top to bottom), else the drill string
+  const assays = s.assays && (REPLAY ? replay.phase !== "drill" : v.cur.metres != null) ? s.assays : null;
+  if (assays) {
+    revealT = Math.min(1, revealT + dt / 1.2);
+    const lim = revealT * planned;
+    for (const [a, b, cu] of assays) {
+      if (a > lim) break;
+      const bb = Math.min(b, lim), ore = cu > cut;
+      ctx.strokeStyle = ore ? (cu > 3 * cut ? css("--ore-hot") : css("--ore")) : css("--waste");
+      ctx.lineWidth = ore ? 7 : 4; ctx.lineCap = "butt";
+      ctx.beginPath(); ctx.moveTo(X(a * g.ds), Y(cz + a * g.dz)); ctx.lineTo(X(bb * g.ds), Y(cz + bb * g.dz)); ctx.stroke();
+    }
+  } else {
+    revealT = 0;
+    if (depthShown > 0.5) {
+      ctx.strokeStyle = css("--accent"); ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(X(0), Y(cz)); ctx.lineTo(X(depthShown * g.ds), Y(cz + depthShown * g.dz)); ctx.stroke();
+      // drill bit glow
+      const bx = X(depthShown * g.ds), by = Y(cz + depthShown * g.dz);
+      const grd = ctx.createRadialGradient(bx, by, 0, bx, by, 16);
+      grd.addColorStop(0, "rgba(255,255,255,.95)"); grd.addColorStop(.3, "rgba(63,182,255,.7)"); grd.addColorStop(1, "rgba(63,182,255,0)");
+      ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(bx, by, 16, 0, 7); ctx.fill();
+    }
+  }
+  // rig at the collar
+  drawRig(ctx, X(0), Y(cz), cur.dip, (REPLAY ? replay.phase === "drill" : v.stage === 3));
+  ctx.restore();
+  // depth readout
+  ctx.fillStyle = css("--text"); ctx.font = "600 13px Segoe UI, system-ui"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillText(`${fmt(depthShown)} / ${fmt(planned)} m`, pad.l + 10, pad.t + 10);
+}
+
+function drawRig(ctx, x, y, dip, active) {
+  const t = performance.now() / 1000;
+  ctx.save(); ctx.translate(x, y);
+  const lean = (90 - Math.abs(dip)) * Math.PI / 180;
+  ctx.rotate(lean);
+  ctx.strokeStyle = "#cfd8e3"; ctx.fillStyle = "#cfd8e3"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(0, -38); ctx.lineTo(9, 0); ctx.stroke();   // mast
+  for (let k = 1; k < 4; k++) { const yy = -k * 9.5, hw = 9 - k * 2.3;
+    ctx.beginPath(); ctx.moveTo(-hw, yy); ctx.lineTo(hw, yy); ctx.stroke(); }
+  const head = active ? -30 + 4 * Math.sin(t * 9) : -30;
+  ctx.fillStyle = active ? css("--accent") : "#8a9bb3"; ctx.fillRect(-4, head, 8, 6);
+  ctx.restore();
+  ctx.fillStyle = "#1c2a3f"; ctx.fillRect(x - 20, y - 2, 40, 5);   // pad
+  if (active) for (let k = 0; k < 6; k++) {                          // dust
+    const a = (t * 1.7 + k / 6) % 1, dx = (k % 2 ? 1 : -1) * (6 + a * 22);
+    ctx.fillStyle = `rgba(207,216,227,${0.35 * (1 - a)})`;
+    ctx.beginPath(); ctx.arc(x + dx, y - 3 - a * 10, 2 + a * 3, 0, 7); ctx.fill();
+  }
+}
+
+function drawPlan(v) {
+  const { ctx, w, h } = fit($("plan"));
+  ctx.clearRect(0, 0, w, h);
+  const s = section;
+  const xs = S.candidates.map(c => c[1]), ys = S.candidates.map(c => c[2]);
+  let x0 = Math.min(...xs) - 80, x1 = Math.max(...xs) + 80, y0 = Math.min(...ys) - 80, y1 = Math.max(...ys) + 80;
+  const sc = Math.min(w / (x1 - x0), h / (y1 - y0));
+  const ox = (w - (x1 - x0) * sc) / 2, oy = (h - (y1 - y0) * sc) / 2;
+  const X = (x) => ox + (x - x0) * sc, Y = (y) => h - oy - (y - y0) * sc;
+  ctx.fillStyle = "#0d1a2b"; ctx.fillRect(X(x0), Y(y1), (x1 - x0) * sc, (y1 - y0) * sc);
+  if (s && s.planImg) {
+    const p = s.plan; ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(s.planImg, X(p.x[0]), Y(p.y[1]), (p.x[1] - p.x[0]) * sc, (p.y[1] - p.y[0]) * sc);
+  }
+  // no-go zones
+  ctx.setLineDash([4, 4]); ctx.strokeStyle = "rgba(255,93,108,.8)"; ctx.lineWidth = 1.2;
+  for (const z of S.no_go) {
+    ctx.beginPath();
+    if (z.kind === "rect") ctx.rect(X(z.x_min), Y(z.y_max), (z.x_max - z.x_min) * sc, (z.y_max - z.y_min) * sc);
+    else ctx.arc(X(z.x), Y(z.y), z.radius * sc, 0, 7);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(138,155,179,.35)";
+  for (const [, x, y] of S.candidates) { ctx.fillRect(X(x) - 0.8, Y(y) - 0.8, 1.6, 1.6); }
+  ctx.strokeStyle = "rgba(230,237,246,.75)"; ctx.lineWidth = 1;
+  for (const [x, y] of S.seed_collars) { ctx.beginPath(); ctx.arc(X(x), Y(y), 2.6, 0, 7); ctx.stroke(); }
+  for (const r of v.recs) {
+    if (r.x == null) continue;
+    const ore = r.ore_m > 0;
+    ctx.fillStyle = ore ? css("--ore") : css("--waste");
+    ctx.beginPath(); ctx.arc(X(r.x), Y(r.y), ore ? 3 + Math.min(5, Math.sqrt(r.ore_m) / 2) : 3, 0, 7); ctx.fill();
+  }
+  if (v.cur) {
+    const az = (Math.abs(v.cur.dip) >= 89 ? 90 : v.cur.azimuth) * Math.PI / 180;
+    const ux = Math.sin(az), uy = Math.cos(az);
+    ctx.strokeStyle = "rgba(63,182,255,.7)"; ctx.setLineDash([6, 5]); ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(X(v.cur.x - 450 * ux), Y(v.cur.y - 450 * uy));
+    ctx.lineTo(X(v.cur.x + 450 * ux), Y(v.cur.y + 450 * uy)); ctx.stroke(); ctx.setLineDash([]);
+    const t = performance.now() / 1000, rr = 6 + 5 * ((t * 1.2) % 1);
+    ctx.strokeStyle = `rgba(63,182,255,${1 - ((t * 1.2) % 1)})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(X(v.cur.x), Y(v.cur.y), rr, 0, 7); ctx.stroke();
+    ctx.fillStyle = css("--accent"); ctx.beginPath(); ctx.arc(X(v.cur.x), Y(v.cur.y), 4, 0, 7); ctx.fill();
+  }
+  // scale bar
+  ctx.fillStyle = css("--muted"); ctx.strokeStyle = css("--muted"); ctx.font = "11px Segoe UI, system-ui";
+  const bx = 14, by = h - 14; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 500 * sc, by); ctx.stroke();
+  ctx.textAlign = "left"; ctx.textBaseline = "bottom"; ctx.fillText("500 m", bx, by - 3);
+  ctx.textAlign = "right"; ctx.fillText("N ↑", w - 10, 18);
+}
+
+function kpisNow(v) {
+  const last = v.recs.length ? v.recs[v.recs.length - 1].kpis : null;
+  if (v.live && state.opc && state.opc["Kpi.Holes"] > (last ? last.holes : 0) && !REPLAY) {
+    const o = state.opc, ok = o["Kpi.BaselineMetres"] >= 0;
+    return { holes: o["Kpi.Holes"], metres: o["Kpi.Metres"], ore_m: o["Kpi.OreMetres"], new_ore_mt: o["Kpi.NewOreMt"],
+             new_cu_kt: o["Kpi.NewCuKt"], drill_cost_aud_m: o["Kpi.DrillCostAudM"],
+             metres_saved: ok ? o["Kpi.MetresSaved"] : null, cost_saved_aud_m: ok ? o["Kpi.CostSavedAudM"] : null,
+             baseline_metres: ok ? o["Kpi.BaselineMetres"] : null };
+  }
+  return last || { holes: 0, metres: 0, ore_m: 0, new_ore_mt: 0, new_cu_kt: 0, drill_cost_aud_m: 0 };
+}
+
+function drawKpis(k) {
+  const saved = k.cost_saved_aud_m;
+  const tiles = [
+    ["Holes drilled", fmt(k.holes), "", `${fmt(k.metres)} m of core`],
+    ["Drilling spend", `A$${fmt(k.drill_cost_aud_m, 2)}`, "M", `at A$${fmt(S.drill_cost_aud_per_m, 0)}/m all-in`],
+    ["Ore intercepted", fmt(k.ore_m), "m", `${k.metres ? fmt(100 * k.ore_m / k.metres, 0) : "–"}% of metres in ore`],
+    ["New ore found", fmt(k.new_ore_mt, 1), "Mt", `≈ ${fmt(k.new_cu_kt, 0)} kt contained Cu`, "ore"],
+    ["Rule of thumb needs", fmt(k.baseline_metres), "m", "to find the same new ore"],
+    ["Saved vs rule of thumb", saved == null ? "–" : `${saved < 0 ? "−" : ""}A$${fmt(Math.abs(saved), 2)}`, saved == null ? "" : "M",
+      k.metres_saved == null ? "no baseline for this much ore" : k.metres_saved >= 0 ? `${fmt(k.metres_saved)} fewer metres`
+        : `${fmt(-k.metres_saved)} m behind so far`, "hero"],
+  ];
+  setHTML("kpis", tiles.map(([l, v, u, s, cls]) =>
+    `<div class="kpi ${cls || ""}"><div class="l">${l}</div><div class="v">${v}<small>${u}</small></div><div class="s">${s}</div></div>`).join(""));
+}
+
+function drawChart(v) {
+  const { ctx, w, h } = fit($("chart"));
+  ctx.clearRect(0, 0, w, h);
+  const pad = { l: 40, r: 10, t: 8, b: 22 };
+  const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
+  const mine = v.recs.map(r => [r.kpis.metres || 0, r.kpis.new_ore_mt || 0]);
+  const b = S.baseline;
+  const xMax = Math.max(2000, ...(mine.length ? [mine[mine.length - 1][0] * 1.15] : [0]));
+  const base = b ? b.metres.map((m, i) => [m, b.blocks[i] * S.block_t / 1e6]).filter(p => p[0] <= xMax) : [];
+  const yMax = Math.max(1, ...mine.map(p => p[1]), ...base.map(p => p[1])) * 1.1;
+  const X = (x) => pad.l + x / xMax * W, Y = (y) => pad.t + H - y / yMax * H;
+  ctx.strokeStyle = "rgba(255,255,255,.06)"; ctx.fillStyle = css("--muted"); ctx.font = "11px Segoe UI, system-ui";
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  const yStep = yMax > 40 ? 20 : yMax > 10 ? 5 : 1;
+  for (let y = 0; y <= yMax; y += yStep) { ctx.beginPath(); ctx.moveTo(pad.l, Y(y)); ctx.lineTo(pad.l + W, Y(y)); ctx.stroke(); ctx.fillText(`${y} Mt`, pad.l - 5, Y(y)); }
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  const xStep = xMax > 20000 ? 10000 : xMax > 8000 ? 2500 : 1000;
+  for (let x = 0; x <= xMax; x += xStep) ctx.fillText(`${fmt(x / 1000, x % 1000 ? 1 : 0)}k m`, X(x), pad.t + H + 6);
+  const line = (pts, color, dash) => { if (!pts.length) return; ctx.setLineDash(dash || []); ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(X(0), Y(0)); for (const [x, y] of pts) ctx.lineTo(X(x), Y(y)); ctx.stroke(); ctx.setLineDash([]); };
+  line(base, "#8a9bb3", [5, 4]);
+  line(mine, css("--accent"));
+  if (mine.length) { const [x, y] = mine[mine.length - 1]; ctx.fillStyle = css("--accent"); ctx.beginPath(); ctx.arc(X(x), Y(y), 3.5, 0, 7); ctx.fill(); }
+}
+
+function drawPipeline(v) {
+  const chips = STAGES.map((name, i) => {
+    let cls = "";
+    if (v.stage >= 0) cls = i < v.stage ? "done" : i === v.stage ? (v.bad ? "bad" : "active") : "";
+    return `<div class="chip ${cls}"><i></i>${name}</div>`;
+  });
+  setHTML("pipeline", chips.join('<span class="arrow">›</span>'));
+  const c = $("conn");
+  c.className = "conn" + (state && state.opc ? " on" : "");
+  c.querySelector("span").textContent = REPLAY ? "Replay of saved run" : state && state.opc ? "OPC UA: connected" : "OPC UA: offline (run folder only)";
+}
+
+function drawTable(v) {
+  const rows = v.recs.slice(-9).reverse().map(r => {
+    const ore = r.ore_m > 0;
+    return `<tr><td>${r.iteration}</td><td>${r.hole_id}</td><td class="n">${fmt(r.metres)}</td><td class="n">${fmt(r.ore_m)}</td>
+      <td><span class="tag ${ore ? "ore" : "waste"}">${ore ? "ore" : "waste"}</span></td></tr>`;
+  });
+  if (v.cur && !v.recs.some(r => r.hole_idx === v.cur.hole_idx))
+    rows.unshift(`<tr class="cur"><td>›</td><td>${v.cur.hole_id}</td><td class="n">${fmt(depthShown)}</td><td class="n">…</td><td>drilling</td></tr>`);
+  setHTML("holes", rows.join(""));
+}
+
+// ---------- replay clock ----------
+function stepReplay(v, dt) {
+  const recs = state ? state.records.filter(r => r.metres > 0) : [];
+  if (!recs.length) return;
+  const r = recs[Math.min(replay.i, recs.length - 1)];
+  const mps = 40 * SPEED;
+  if (replay.phase === "drill") {
+    replay.depth = Math.min(r.metres, replay.depth + mps * dt);
+    if (replay.depth >= r.metres) { replay.phase = "assay"; replay.t0 = performance.now(); }
+  } else if (replay.phase === "assay" && performance.now() - replay.t0 > 1600 / SPEED) {
+    replay.phase = "learn"; replay.t0 = performance.now();
+  } else if (replay.phase === "learn" && performance.now() - replay.t0 > 1400 / SPEED) {
+    if (replay.i < recs.length - 1) { replay.i++; replay.phase = "drill"; replay.depth = 0; }
+  }
+}
+
+// ---------- main loop ----------
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (S && state) {
+    if (REPLAY) stepReplay(null, dt);
+    const v = view();
+    ensureSection(v);
+    if (v.cur) {
+      const t = `${v.cur.hole_id} <em>· azimuth ${fmt(v.cur.azimuth)}° · dip ${fmt(v.cur.dip)}° · planned ${fmt(Math.min(v.cur.depth, S.max_depth_m))} m</em>`;
+      setHTML("secTitle", t);
+    }
+    $("runname").textContent = `Hillside Cu-Au · ${state.run || "no run yet"}`;
+    drawSection(v, dt); drawPlan(v); drawChart(v); drawPipeline(v); drawTable(v); drawKpis(kpisNow(v));
+  }
+  requestAnimationFrame(frame);
+}
+
+(async function init() {
+  while (!S) {   // the server may still be starting
+    try { S = await getJSON("/api/static"); } catch (e) { await new Promise(r => setTimeout(r, 1000)); }
+  }
+  $("cut").textContent = S.cutoff_pct;
+  $("assume").textContent = `Indicative: new ore = 25 × 25 × 10 m blocks first reached by an assayed ore sample, ${S.density_t_m3} t/m³ assumed; ` +
+    `drilling A$${S.drill_cost_aud_per_m}/m (IBISWorld 2025–26). Rule of thumb = drill the hole with most trace near known ore.`;
+  poll();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

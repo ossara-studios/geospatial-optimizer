@@ -52,6 +52,21 @@ In another, send one recommendation:
 ```
 To test against real EAE, pass `--endpoint opc.tcp://<eae-host>:<port>`. See [docs/eae_contract.md](docs/eae_contract.md).
 
+## Live demo (animated)
+Four terminals, in this order. The live page only reads OPC UA and the run folder, so it works
+unchanged against real EAE:
+```bash
+.venv/bin/geoopt baseline                   # once: near-ore rule of thumb, for "cost saved"
+.venv/bin/geoopt emulator --auto-approve    # stands in for EAE (drop --auto-approve to approve by hand)
+.venv/bin/geoopt rig-sim
+.venv/bin/geoopt live                       # http://localhost:8600
+.venv/bin/geoopt run-loop --bridge opcua --max-holes 20
+```
+`http://localhost:8600/?replay` replays the latest finished run without OPC UA (`&speed=2` for
+faster; `&run=<folder>` for another run). The KPIs are INDICATIVE: new ore uses an assumed
+2.8 t/m³ and drilling an assumed A$373.70/m (see `config/default.yaml` → `kpi`). The planner
+also writes them to the `Kpi.*` OPC UA variables for the EAE HMI.
+
 ## Visualizer
 ```bash
 .venv/bin/geoopt viz

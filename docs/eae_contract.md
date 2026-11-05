@@ -49,7 +49,7 @@ lists.
 | | `Kpi.Metres`, `Kpi.OreMetres` | Double | Planner | Metres drilled; assayed metres above the cutoff |
 | | `Kpi.NewOreMt`, `Kpi.NewCuKt` | Double | Planner | New ore found (Mt) and its contained Cu (kt): blocks first reached by an assayed ore sample, at an assumed 2.8 t/m³ |
 | | `Kpi.DrillCostAudM` | Double | Planner | Metres × A$373.70/m (assumed all-in cost), A$ million |
-| | `Kpi.BaselineMetres`, `Kpi.MetresSaved`, `Kpi.CostSavedAudM` | Double | Planner | Metres the near-ore rule needed to find as much new ore, the difference, and its cost (A$ M). −1 = not available |
+| | `Kpi.BaselineMetres`, `Kpi.MetresSaved`, `Kpi.CostSavedAudM` | Double | Planner | Metres the near-ore rule needed to find as much new ore, the difference, and its cost (A$ M). `Kpi.BaselineMetres` = −1 means not available (savings then read 0); savings can be negative early on |
 
 The planner writes the `Kpi.*` group after each hole's assays are in. EAE only displays it:
 no EAE logic depends on it, and its values are INDICATIVE (see `geoopt.kpi`).

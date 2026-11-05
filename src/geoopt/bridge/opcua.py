@@ -66,7 +66,8 @@ class OpcUaBridge:
             if node not in self._cfg.nodes.nodes:
                 continue
             v = kpis.get(key, float("nan"))
-            v = -1.0 if not math.isfinite(v) else v
+            if not math.isfinite(v):
+                v = -1.0 if key == "baseline_metres" else 0.0
             await self._s.write(node, int(v) if node == "Kpi.Holes" else float(v))
 
     async def await_completion(self, req_id: int) -> Completion:
@@ -76,7 +77,7 @@ class OpcUaBridge:
         return Completion(req_id, self._hole_of.pop(req_id), metres)
 
 
-# KPI field -> node. NaN (no baseline yet) is written as -1 so integer-minded HMIs can hide it.
+# KPI field -> node. With no baseline value, Kpi.BaselineMetres is -1 and the savings are 0.
 _KPI_NODES = {
     "Kpi.Holes": "holes",
     "Kpi.Metres": "metres",

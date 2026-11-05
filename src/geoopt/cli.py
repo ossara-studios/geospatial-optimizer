@@ -137,6 +137,22 @@ def baseline(
     )
 
 
+@app.command()
+def live(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+    port: Annotated[int, typer.Option(help="HTTP port.")] = 8600,
+) -> None:
+    """Live drilling view (animated). Reads OPC UA and the run folder; add ?replay to replay."""
+    import uvicorn
+
+    from geoopt.live.server import build_app
+
+    cfg = load_config(config)
+    configure_logging(cfg.log_level)
+    typer.echo(f"live view on http://localhost:{port}  (replay a finished run: /?replay)")
+    uvicorn.run(build_app(cfg), host="127.0.0.1", port=port, log_level="warning")
+
+
 @app.command("rig-sim")
 def rig_sim(
     config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
