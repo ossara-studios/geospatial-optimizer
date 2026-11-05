@@ -119,3 +119,31 @@ def test_variance_reduction_matches_conditioning() -> None:
         after_model.condition(groups[g], np.full(len(groups[g]), 0.5))
         _, after = after_model.predict(targets)
         assert r == pytest.approx(float(np.sum(w * (before**2 - after**2))), rel=1e-6)
+
+
+def test_frozen_fit_reloads_identically(tmp_path) -> None:
+    rng = np.random.default_rng(0)
+    xyz = rng.uniform(0, 100, (80, 3))
+    cu = rng.lognormal(-1.5, 1.0, 80)
+    cfg = ModelConfig(
+        log_eps=0.001,
+        cutoff_pct=0.2,
+        max_train=1000,
+        fit_iters=20,
+        lr=0.05,
+        refit_every=0,
+        cv_folds=2,
+        device="cpu",
+        fit_cache_dir=tmp_path,
+    )
+    first = GPOreModel(cfg, seed=0)
+    first.fit(xyz, cu)
+    assert len(list(tmp_path.glob("seed-fit-*.pt"))) == 1
+    second = GPOreModel(cfg, seed=0)
+    second.fit(xyz, cu)
+    q = rng.uniform(0, 100, (20, 3))
+    np.testing.assert_allclose(first.predict(q)[0], second.predict(q)[0], rtol=1e-12)
+    assert first.hyperparameters() == second.hyperparameters()
+    # Different data, different file.
+    GPOreModel(cfg, seed=0).fit(xyz[:60], cu[:60])
+    assert len(list(tmp_path.glob("seed-fit-*.pt"))) == 2

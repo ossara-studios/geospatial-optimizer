@@ -23,3 +23,7 @@ class Bridge(Protocol):
     async def await_completion(self, req_id: int) -> Completion:
         """Wait until the rig reports the dispatched hole complete (lab results released)."""
         ...
+
+    async def publish_kpis(self, kpis: dict[str, float]) -> None:
+        """Show the discovery KPIs on the OT side (HMI). Display only."""
+        ...

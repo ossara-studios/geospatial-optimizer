@@ -35,7 +35,7 @@ def test_planner_side_cannot_reach_truth(path: Path) -> None:
 async def test_loop_runs_end_to_end(prepared_cfg: Config, tmp_path: Path, strategy: str) -> None:
     prepare(prepared_cfg)
     run_dir = tmp_path / "runs" / strategy
-    loop, _ = build_inprocess_loop(prepared_cfg, strategy, run_dir)
+    loop, _ = build_inprocess_loop(prepared_cfg, strategy, run_dir, with_kpis=True)
     n_seed_train = loop._model.n_train
     records = await loop.run()
     summary = summarize(records)
@@ -51,7 +51,10 @@ async def test_loop_runs_end_to_end(prepared_cfg: Config, tmp_path: Path, strate
     assert loop._model.n_train == n_seed_train + released
     # Artifacts per iteration.
     last = run_dir / f"iter_{len(records):03d}"
-    assert json.loads((last / "record.json").read_text())["req_id"] == len(records)
+    rec = json.loads((last / "record.json").read_text())
+    assert rec["req_id"] == len(records)
+    assert rec["kpis"]["holes"] == prepared_cfg.loop.max_holes
+    assert rec["kpis"]["metres"] == pytest.approx(summary["metres"])
     assert len(pd.read_parquet(last / "grid.parquet")) == 6 * 6 * 4
     assert (run_dir / "config.yaml").exists()
 

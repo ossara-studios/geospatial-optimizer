@@ -36,6 +36,9 @@ class InProcessBridge:
             raise KeyError(f"no checked request {req_id}")
         return Decision.APPROVED
 
+    async def publish_kpis(self, kpis: dict[str, float]) -> None:
+        return None  # no HMI in-process
+
     async def await_completion(self, req_id: int) -> Completion:
         rec, check = self._pending.pop(req_id)
         metres = self._rig.metres_drilled(rec.hole_idx, check.depth)

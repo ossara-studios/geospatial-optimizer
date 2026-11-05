@@ -20,6 +20,7 @@ from geoopt.bridge.inprocess import InProcessBridge
 from geoopt.bridge.opcua import OpcUaBridge
 from geoopt.config import Config
 from geoopt.data.prepare import prepared_paths
+from geoopt.kpi import DiscoveryTracker, kpi_geometry, load_baseline
 from geoopt.loop import DecisionLoop, IterationRecord
 from geoopt.model.gp import GPOreModel
 from geoopt.planner.strategies import make_strategy
@@ -67,6 +68,7 @@ def build_loop(
     lab_dir: Path,
     rng_seed: int | None = None,
     write_grid: bool = True,
+    with_kpis: bool = False,
 ) -> DecisionLoop:
     seed = cfg.seed if rng_seed is None else rng_seed
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -87,6 +89,24 @@ def build_loop(
         run_dir=run_dir,
         lab_dir=lab_dir,
         write_grid=write_grid,
+        kpi=discovery_tracker(cfg, inputs) if with_kpis else None,
+    )
+
+
+def discovery_tracker(cfg: Config, inputs: PlannerInputs) -> DiscoveryTracker:
+    baseline = load_baseline(cfg.kpi.baseline_file)
+    if baseline is None:
+        log.warning(
+            "no near-ore baseline at %s: run `geoopt baseline` for cost saved",
+            cfg.kpi.baseline_file,
+        )
+    return DiscoveryTracker(
+        cfg.kpi,
+        cfg.model.cutoff_pct,
+        cfg.backtest.block_size_m,
+        kpi_geometry(inputs.points, inputs.seed_composites, cfg.limits.max_depth_m),
+        inputs.seed_composites,
+        baseline,
     )
 
 
@@ -96,13 +116,16 @@ def build_inprocess_loop(
     run_dir: Path,
     rng_seed: int | None = None,
     write_grid: bool = True,
+    with_kpis: bool = False,
 ) -> tuple[DecisionLoop, LabSim]:
     seed = cfg.seed if rng_seed is None else rng_seed
     inputs = load_planner_inputs(cfg)
     lab_dir = run_dir / "lab"
     lab = LabSim(prepared_paths(cfg.data.processed_dir).heldout_composites, lab_dir)
     bridge = InProcessBridge(cfg.limits, RigSim(inputs.candidates, seed), lab)
-    loop = build_loop(cfg, inputs, strategy_name, bridge, run_dir, lab_dir, seed, write_grid)
+    loop = build_loop(
+        cfg, inputs, strategy_name, bridge, run_dir, lab_dir, seed, write_grid, with_kpis
+    )
     return loop, lab
 
 
@@ -110,7 +133,7 @@ async def run_inprocess(
     cfg: Config, strategy_name: str, run_dir: Path | None = None
 ) -> list[IterationRecord]:
     run_dir = run_dir or new_run_dir(cfg, strategy_name)
-    loop, _ = build_inprocess_loop(cfg, strategy_name, run_dir)
+    loop, _ = build_inprocess_loop(cfg, strategy_name, run_dir, with_kpis=True)
     records = await loop.run()
     log.info("run written to %s", run_dir)
     return records
@@ -123,7 +146,9 @@ async def run_opcua(
     run_dir = run_dir or new_run_dir(cfg, f"{strategy_name}-opcua")
     inputs = load_planner_inputs(cfg)
     async with OpcUaBridge.connect(cfg) as bridge:
-        loop = build_loop(cfg, inputs, strategy_name, bridge, run_dir, cfg.loop.live_lab_dir)
+        loop = build_loop(
+            cfg, inputs, strategy_name, bridge, run_dir, cfg.loop.live_lab_dir, with_kpis=True
+        )
         records = await loop.run()
     log.info("run written to %s", run_dir)
     return records

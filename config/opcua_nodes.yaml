@@ -39,3 +39,13 @@ nodes:
   # Completion forwarded to the planner side (E)
   Done.ReqId:        {id: Done.ReqId,        type: UInt32}
   Done.MetresDrilled: {id: Done.MetresDrilled, type: Double}
+  # Discovery KPIs (P), written after each hole for the HMI. INDICATIVE (see docs/eae_contract.md).
+  Kpi.Holes:         {id: Kpi.Holes,         type: UInt32}
+  Kpi.Metres:        {id: Kpi.Metres,        type: Double}
+  Kpi.OreMetres:     {id: Kpi.OreMetres,     type: Double}
+  Kpi.NewOreMt:      {id: Kpi.NewOreMt,      type: Double}
+  Kpi.NewCuKt:       {id: Kpi.NewCuKt,       type: Double}
+  Kpi.DrillCostAudM: {id: Kpi.DrillCostAudM, type: Double}
+  Kpi.BaselineMetres: {id: Kpi.BaselineMetres, type: Double}
+  Kpi.MetresSaved:   {id: Kpi.MetresSaved,   type: Double}
+  Kpi.CostSavedAudM: {id: Kpi.CostSavedAudM, type: Double}

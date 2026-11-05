@@ -48,7 +48,7 @@ split:
 
 model:
   log_eps: 0.001      # % Cu added before log (below-detection values stay finite)
-  cutoff_pct: 0.2     # PLACEHOLDER: team to set from the deposit's resource report
+  cutoff_pct: 0.2     # Rex Minerals, Hillside Mineral Resource Dec 2022, reported at 0.2 % Cu
   max_train: 6000     # exact-GP cap; older points are subsampled beyond this
   fit_iters: 150
   lr: 0.05
@@ -56,9 +56,10 @@ model:
   cv_folds: 5
   device: auto        # auto = NVIDIA GPU (CUDA) when torch sees one, else CPU; or cpu | cuda
   dtype: auto         # auto = float32 on GPU, float64 on CPU; or float32 | float64
+  fit_cache_dir: ../runs/model   # frozen seed fits (hyperparameters), reused across runs
 
 planner:
-  beta: 0.5             # exploration weight (unit-free when standardize is true)
+  beta: 1.0             # exploration weight (unit-free when standardize is true); frozen 2026-11-05
   gamma: 0.0            # boundary-uncertainty weight (0 = off)
   delta: 0.0            # targeted variance-reduction weight (0 = off)
   ore_weight: 1.0
@@ -95,7 +96,7 @@ backtest:
     - {beta: 0.5, gamma: 1.0}
     - {beta: 0.5, gamma: 2.0}
     - {beta: 1.0, gamma: 1.0}
-  beta_sweep: [1.0, 2.0, 4.0]  # fixed before seeing sweep results; planner.beta is the base
+  beta_sweep: [0.5, 2.0, 4.0]  # fixed before seeing sweep results; planner.beta (1.0) is the base
   assay_delay_sweep: [5, 10]   # lab turnaround in holes; fixed before seeing results
   assay_delay_beta: 1.0
   delineation_sweep:    # targeted variance reduction (delta); fixed before seeing its results
@@ -103,6 +104,15 @@ backtest:
     - {beta: 0.5, delta: 2.0}
     - {beta: 1.0, delta: 1.0}
     - {beta: 0.0, delta: 1.0, ore_weight: 0.0}   # pure delineation
+
+kpi:   # live discovery KPIs shown on the HMI and the visualizer (INDICATIVE)
+  radius_m: 25.0          # ore composites "reach" blocks within this
+  block_radius_m: 50.0
+  density_t_m3: 2.8       # ASSUMPTION: typical fresh-rock density; not from the resource report
+  drill_cost_aud_per_m: 373.70   # IBISWorld brownfield drilling service price, 2025-26 average
+  near_ore_m: 50.0        # near-ore baseline: drill beside known ore
+  baseline_budget_m: 60000.0   # baseline runs past the planner so metres saved stay defined
+  baseline_file: ../runs/baseline/near_ore.parquet   # built by `geoopt baseline`
 
 opcua:
   # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).

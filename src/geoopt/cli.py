@@ -18,6 +18,7 @@ from geoopt.backtest import (
     run_boundary_sweep,
     run_delineation_sweep,
 )
+from geoopt.baseline import near_ore_curve
 from geoopt.config import DEFAULT_CONFIG_PATH, load_config
 from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
@@ -117,6 +118,23 @@ def backtest(
         return
     run_backtest(cfg, workers=workers)
     typer.echo(f"wrote {cfg.backtest.out_dir}")
+
+
+@app.command()
+def baseline(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+) -> None:
+    """Replay the near-ore rule on the prepared data; run-loop reports cost saved against it."""
+    cfg = load_config(config)
+    configure_logging(cfg.log_level)
+    if cfg.kpi.baseline_file is None:
+        raise typer.BadParameter("kpi.baseline_file is not set")
+    curve = near_ore_curve(cfg, cfg.kpi.baseline_file)
+    last = curve.iloc[-1]
+    typer.echo(
+        f"near-ore baseline: {int(last.holes)} holes, {last.metres:,.0f} m, "
+        f"{int(last.new_ore_blocks)} new ore blocks -> {cfg.kpi.baseline_file}"
+    )
 
 
 @app.command("rig-sim")

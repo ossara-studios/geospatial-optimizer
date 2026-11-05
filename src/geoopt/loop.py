@@ -20,6 +20,7 @@ import pandas as pd
 
 from geoopt.bridge.base import Bridge
 from geoopt.config import LoopConfig
+from geoopt.kpi import DiscoveryTracker
 from geoopt.model.gp import OreModel
 from geoopt.planner.strategies import PlannerState, Strategy
 from geoopt.protocol import CheckStatus, Decision, RecommendationMsg
@@ -44,6 +45,7 @@ class IterationRecord:
     cumulative_metres: float = 0.0
     prob_ore: float = 0.0
     breakdown: dict[str, float] = field(default_factory=dict)
+    kpis: dict[str, float] = field(default_factory=dict)
     timings_s: dict[str, float] = field(default_factory=dict)
 
 
@@ -69,6 +71,7 @@ class DecisionLoop:
         lab_dir: Path,
         write_grid: bool = True,
         on_iteration: Callable[[IterationRecord], None] | None = None,
+        kpi: DiscoveryTracker | None = None,
     ) -> None:
         self._cfg = cfg
         self._strategy = strategy
@@ -79,6 +82,7 @@ class DecisionLoop:
         self._lab_dir = lab_dir
         self._grid = eval_grid(points, cfg.eval_grid) if write_grid else None
         self.on_iteration = on_iteration
+        self._kpi = kpi
         self.state = PlannerState(
             candidates=candidates,
             points=points,
@@ -181,12 +185,19 @@ class DecisionLoop:
         t4 = time.perf_counter()
         lab = pd.read_parquet(self._lab_dir / f"{msg.hole_idx}.parquet")
         self._pending.append(lab)
+        if self._kpi is not None:
+            self._kpi.add_hole(done.metres_drilled, None)
         # With a lag of k, a hole's assays arrive once k more holes have been drilled.
         while len(self._pending) > self._cfg.assay_lag_holes:
             ready = self._pending.popleft()
             if len(ready):
                 self._model.condition(ready[["x", "y", "z"]].to_numpy(), ready["cu"].to_numpy())
+                if self._kpi is not None:
+                    self._kpi.add_assays(ready)
         t["condition"] = time.perf_counter() - t4
+        if self._kpi is not None:
+            record.kpis = self._kpi.kpis().as_dict()
+            await self._bridge.publish_kpis(record.kpis)
 
         self.state.available.discard(msg.hole_idx)
         self.state.drilled_xy = np.vstack([self.state.drilled_xy, [[msg.collar_x, msg.collar_y]]])

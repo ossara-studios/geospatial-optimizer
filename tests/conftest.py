@@ -14,7 +14,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def cfg() -> Config:
-    return load_config(REPO_ROOT / "config" / "default.yaml")
+    c = load_config(REPO_ROOT / "config" / "default.yaml")
+    # Tests never read or write the repo's frozen-fit cache.
+    return c.model_copy(update={"model": c.model.model_copy(update={"fit_cache_dir": None})})
 
 
 @pytest.fixture

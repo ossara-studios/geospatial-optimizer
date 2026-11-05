@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -60,11 +61,33 @@ class OpcUaBridge:
     async def await_approval(self, req_id: int) -> Decision:
         return await await_approval(self._s, req_id, self._cfg.opcua.timeouts.approval_s)
 
+    async def publish_kpis(self, kpis: dict[str, float]) -> None:
+        for node, key in _KPI_NODES.items():
+            if node not in self._cfg.nodes.nodes:
+                continue
+            v = kpis.get(key, float("nan"))
+            v = -1.0 if not math.isfinite(v) else v
+            await self._s.write(node, int(v) if node == "Kpi.Holes" else float(v))
+
     async def await_completion(self, req_id: int) -> Completion:
         await self._s.wait_for_req_id("Done.ReqId", req_id, self._cfg.opcua.timeouts.drill_s)
         metres = float(await self._s.read("Done.MetresDrilled"))
         log.info("completion req_id=%s metres=%.1f", req_id, metres)
         return Completion(req_id, self._hole_of.pop(req_id), metres)
+
+
+# KPI field -> node. NaN (no baseline yet) is written as -1 so integer-minded HMIs can hide it.
+_KPI_NODES = {
+    "Kpi.Holes": "holes",
+    "Kpi.Metres": "metres",
+    "Kpi.OreMetres": "ore_m",
+    "Kpi.NewOreMt": "new_ore_mt",
+    "Kpi.NewCuKt": "new_cu_kt",
+    "Kpi.DrillCostAudM": "drill_cost_aud_m",
+    "Kpi.BaselineMetres": "baseline_metres",
+    "Kpi.MetresSaved": "metres_saved",
+    "Kpi.CostSavedAudM": "cost_saved_aud_m",
+}
 
 
 @dataclass(frozen=True)

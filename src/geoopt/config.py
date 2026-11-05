@@ -118,7 +118,7 @@ class SplitConfig(_Strict):
 class ModelConfig(_Strict):
     # Model target is log(cu + log_eps), cu in %.
     log_eps: float = Field(gt=0)
-    # Ore cutoff, % Cu. Placeholder until the team picks one from the deposit's resource report.
+    # Ore cutoff, % Cu. Rex Minerals report the Hillside Mineral Resource (Dec 2022) at 0.2 % Cu.
     cutoff_pct: float = Field(gt=0)
     max_train: int = Field(gt=0)
     fit_iters: int = Field(gt=0)
@@ -129,6 +129,9 @@ class ModelConfig(_Strict):
     # (consumer GPUs run float64 at ~1/64 speed) and float64 on CPU, the reference.
     device: Literal["cpu", "cuda", "auto"] = "auto"
     dtype: Literal["float64", "float32", "auto"] = "auto"
+    # Frozen seed fit: the tuned hyperparameters are saved here, keyed by the training data and
+    # these settings, and loaded instead of re-tuning. Identical results, instant start.
+    fit_cache_dir: Path | None = None
 
 
 class PlannerConfig(_Strict):
@@ -231,6 +234,18 @@ class EnvFactors(_Strict):
     pad_area_m2_per_hole: float = Field(ge=0)
 
 
+class KpiConfig(_Strict):
+    """Live discovery KPIs (geoopt.kpi). Density and drilling cost are stated ASSUMPTIONS."""
+
+    radius_m: float = Field(25.0, gt=0)  # a block is reached by ore composites within this
+    block_radius_m: float = Field(50.0, gt=0)  # blocks counted within this of any geometry
+    density_t_m3: float = Field(2.8, gt=0)
+    drill_cost_aud_per_m: float = Field(373.70, gt=0)
+    near_ore_m: float = Field(50.0, gt=0)  # near-ore baseline rule
+    baseline_budget_m: float = Field(60_000.0, gt=0)  # long enough to match the planner
+    baseline_file: Path | None = None
+
+
 class Config(_Strict):
     seed: int
     log_level: str = "INFO"
@@ -243,6 +258,7 @@ class Config(_Strict):
     planner: PlannerConfig
     backtest: BacktestConfig
     env: EnvFactors
+    kpi: KpiConfig = KpiConfig()
     opcua: OpcUaConfig
     limits: Limits
     nodes: NodeMap
@@ -265,4 +281,8 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
         raw["data"][key] = (base / raw["data"][key]).resolve()
     for key in ("runs_dir", "live_lab_dir"):
         raw["loop"][key] = (base / raw["loop"][key]).resolve()
+    if raw.get("kpi", {}).get("baseline_file"):
+        raw["kpi"]["baseline_file"] = (base / raw["kpi"]["baseline_file"]).resolve()
+    if raw["model"].get("fit_cache_dir"):
+        raw["model"]["fit_cache_dir"] = (base / raw["model"]["fit_cache_dir"]).resolve()
     return Config.model_validate(raw)

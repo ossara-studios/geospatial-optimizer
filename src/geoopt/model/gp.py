@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import time
+from pathlib import Path
 from typing import Protocol
 
 import gpytorch
@@ -60,6 +63,7 @@ class GPOreModel:
         if dtype == "auto":
             dtype = "float32" if self._device.type == "cuda" else "float64"
         self._dtype = torch.float32 if dtype == "float32" else torch.float64
+        self._seed = seed
         self._rng = np.random.default_rng(seed)
         torch.manual_seed(seed)
         self._scaler: CoordScaler | None = None
@@ -75,7 +79,50 @@ class GPOreModel:
         self._scaler = CoordScaler.fit(xyz)
         self._xyz = np.asarray(xyz, dtype=float)
         self._y = to_log_grade(cu, self._cfg.log_eps)
+        cache = self._fit_cache_path()
+        if cache is not None and cache.exists():
+            self._load(cache)
+            return
         self._train()
+        if cache is not None:
+            self._save(cache)
+
+    def _fit_cache_path(self) -> Path | None:
+        """Frozen-fit file for this training data, settings, device and dtype."""
+        if self._cfg.fit_cache_dir is None:
+            return None
+        h = hashlib.sha256()
+        h.update(np.ascontiguousarray(self._xyz).tobytes())
+        h.update(np.ascontiguousarray(self._y).tobytes())
+        settings = self._cfg.model_dump(mode="json", exclude={"fit_cache_dir", "cv_folds"})
+        h.update(
+            json.dumps(
+                settings
+                | {"seed": self._seed, "device": self._device.type, "dtype": str(self._dtype)},
+                sort_keys=True,
+            ).encode()
+        )
+        return Path(self._cfg.fit_cache_dir) / f"seed-fit-{h.hexdigest()[:16]}.pt"
+
+    def _save(self, path: Path) -> None:
+        model, likelihood = self._require_fitted()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save({"model": model.state_dict(), "likelihood": likelihood.state_dict()}, path)
+        path.with_suffix(".json").write_text(
+            json.dumps({"n_train": self.n_train, **self.hyperparameters()}, indent=2)
+        )
+        log.info("gp fit frozen to %s", path)
+
+    def _load(self, path: Path) -> None:
+        x, y = self._training_tensors()
+        likelihood = gpytorch.likelihoods.GaussianLikelihood().to(self._device, self._dtype)
+        model = _ExactGP(x, y, likelihood).to(self._device, self._dtype)
+        state = torch.load(path, map_location=self._device, weights_only=True)
+        model.load_state_dict(state["model"])
+        likelihood.load_state_dict(state["likelihood"])
+        self._model, self._likelihood = model, likelihood
+        self._steps_since_fit = 0
+        log.info("gp fit loaded from %s hyper=%s", path, self.hyperparameters())
 
     def condition(self, xyz: np.ndarray, cu: np.ndarray) -> None:
         if self._model is None:
