@@ -60,6 +60,8 @@ model:
 planner:
   beta: 0.5             # exploration weight (unit-free when standardize is true)
   gamma: 0.0            # boundary-uncertainty weight (0 = off)
+  delta: 0.0            # targeted variance-reduction weight (0 = off)
+  ore_weight: 1.0
   standardize: true
   min_spacing_m: 25.0   # soft penalty for collars closer than this to drilled holes
   spacing_weight: 1.0
@@ -73,16 +75,32 @@ backtest:
     - {name: earliest60, method: earliest, n_seed: 60}
     - {name: spread60-a, method: spread, n_seed: 60, seed: 1}
     - {name: spread60-b, method: spread, n_seed: 60, seed: 2}
-  metre_budget: 15000.0   # same metres for every strategy
-  max_holes: 300
+  # Same metres for every strategy. 60,000 m is ~30 % of Rex's 2010-2012 resource drilling;
+  # results are reported at each report_at_m checkpoint.
+  metre_budget: 60000.0
+  report_at_m: [3750.0, 7500.0, 15000.0, 30000.0, 60000.0]
+  discovery_at_m: 15000.0   # discovery-equivalent savings, comparable with earlier results
+  max_holes: 500
   ore_threshold: 0.5
   f1_target: 0.6
   near_radius_m: 50.0   # near-data delineation zone; fixed before seeing its results
+  # Block-model delineation vs a reference GP fitted on every hole, grade-above-cutoff rule.
+  # All fixed before seeing any block results.
+  block_size_m: [25.0, 25.0, 10.0]
+  block_radius_m: 50.0      # blocks within this of any assayed composite
+  block_every_m: 1250.0     # divides every report_at_m checkpoint
+  reference_max_train: 6000
+  block_f1_targets: [0.7, 0.8, 0.9]
   boundary_sweep:       # fixed before seeing its results
     - {beta: 0.5, gamma: 1.0}
     - {beta: 0.5, gamma: 2.0}
     - {beta: 1.0, gamma: 1.0}
   beta_sweep: [1.0, 2.0, 4.0]  # fixed before seeing sweep results; planner.beta is the base
+  delineation_sweep:    # targeted variance reduction (delta); fixed before seeing its results
+    - {beta: 0.5, delta: 1.0}
+    - {beta: 0.5, delta: 2.0}
+    - {beta: 1.0, delta: 1.0}
+    - {beta: 0.0, delta: 1.0, ore_weight: 0.0}   # pure delineation
 
 opcua:
   # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).

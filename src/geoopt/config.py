@@ -135,6 +135,15 @@ class PlannerConfig(_Strict):
     beta: float = Field(ge=0)  # weight on exploration (uncertainty) vs expected ore
     # Weight on boundary uncertainty: latent P(ore) * (1 - P(ore)), highest at ore/waste edges.
     gamma: float = Field(0.0, ge=0)
+    # Weight on targeted variance reduction: how much drilling the hole would shrink the
+    # latent variance of blocks near the ore/waste boundary across the deposit (tIMSE).
+    delta: float = Field(0.0, ge=0)
+    ore_weight: float = Field(1.0, ge=0)  # weight on expected ore (0 = pure delineation)
+    delin_pool: int = Field(20_000, gt=0)  # fixed random subset of blocks the term considers
+    delin_targets: int = Field(2_000, gt=0)  # blocks sampled per iteration, by boundary weight
+    delin_point_stride: int = Field(2, gt=0)  # use every k-th sample point along each hole
+    block_size_m: tuple[float, float, float] = (25.0, 25.0, 10.0)
+    block_radius_m: float = Field(50.0, gt=0)  # blocks within this of a candidate sample
     # z-score both terms across candidates each iteration so beta is unit-free.
     standardize: bool = True
     min_spacing_m: float = Field(ge=0)
@@ -160,10 +169,18 @@ class LoopConfig(_Strict):
 class AdaptiveVariant(_Strict):
     beta: float = Field(ge=0)
     gamma: float = Field(0.0, ge=0)
+    delta: float = Field(0.0, ge=0)
+    ore_weight: float = Field(1.0, ge=0)
 
     @property
     def label(self) -> str:
-        return f"adaptive-b{self.beta:g}" + (f"-g{self.gamma:g}" if self.gamma else "")
+        return (
+            "adaptive"
+            + (f"-o{self.ore_weight:g}" if self.ore_weight != 1 else "")
+            + f"-b{self.beta:g}"
+            + (f"-g{self.gamma:g}" if self.gamma else "")
+            + (f"-d{self.delta:g}" if self.delta else "")
+        )
 
 
 class SeedSet(_Strict):
@@ -179,13 +196,25 @@ class BacktestConfig(_Strict):
     random_seeds: list[int]
     seed_sets: list[SeedSet]
     metre_budget: float = Field(gt=0)
+    # Summary checkpoints in cumulative metres; empty = 25 %, 50 % and 100 % of the budget.
+    report_at_m: list[float] = []
+    # Discovery-equivalent savings match each baseline's ore at this many metres (null = budget).
+    discovery_at_m: float | None = Field(None, gt=0)
     max_holes: int = Field(gt=0)
     ore_threshold: float = Field(0.5, gt=0, lt=1)  # classify ore when P(ore) > this
     f1_target: float = Field(gt=0, le=1)  # "metres to target" uses this delineation F1
     # Near-data delineation scores undrilled composites within this distance of any assayed one.
     near_radius_m: float = Field(50.0, gt=0)
+    # Block-model delineation: each strategy's block estimate vs a reference model fitted on
+    # every hole (what the final resource model would be built from). Grade-above-cutoff rule.
+    block_size_m: tuple[float, float, float] = (25.0, 25.0, 10.0)
+    block_radius_m: float = Field(50.0, gt=0)  # blocks within this of any assayed composite
+    block_every_m: float = Field(2_500.0, gt=0)  # score blocks each time this many metres pass
+    reference_max_train: int = Field(6_000, gt=0)
+    block_f1_targets: list[float] = [0.7, 0.8, 0.9]  # "metres to block F1" reported for each
     beta_sweep: list[float] = []  # extra adaptive betas for `geoopt backtest --beta-sweep`
     boundary_sweep: list[AdaptiveVariant] = []  # for `geoopt backtest --boundary-sweep`
+    delineation_sweep: list[AdaptiveVariant] = []  # for `geoopt backtest --delineation-sweep`
 
 
 class EnvFactors(_Strict):

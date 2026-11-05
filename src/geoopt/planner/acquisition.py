@@ -14,6 +14,7 @@ SCORE_COLUMNS = [
     "exp_ore_per_m",
     "explore_per_m",
     "boundary_per_m",
+    "delin_per_m",
     "spacing_penalty",
     "score",
 ]
@@ -42,6 +43,7 @@ def score_candidates(
     drilled_xy: np.ndarray,
     cfg: PlannerConfig,
     p_latent: np.ndarray | None = None,
+    delin: pd.Series | None = None,
 ) -> pd.DataFrame:
     """Score candidate holes.
 
@@ -50,6 +52,8 @@ def score_candidates(
         exp_ore_m = sum(P(ore) * l), explore = sum(sigma * l), both divided by depth,
     then optionally z-scored across candidates before score = ore + beta * explore - penalty.
     With `p_latent` (latent P(ore)), boundary = sum(p * (1 - p) * l) / depth adds gamma * boundary.
+    With `delin` (targeted variance reduction per hole_idx), delin / depth adds delta * delin.
+    The expected-ore term is weighted by ore_weight (0 = pure delineation).
     """
     per_point = pd.DataFrame(
         {
@@ -72,13 +76,24 @@ def score_candidates(
     out["exp_ore_per_m"] = out["exp_ore_m"] / out["depth"]
     out["explore_per_m"] = out["explore"] / out["depth"]
     out["boundary_per_m"] = out.pop("boundary_m") / out["depth"]
+    out["delin_per_m"] = (
+        out["hole_idx"].map(delin).fillna(0.0) / out["depth"] if delin is not None else 0.0
+    )
     ore = out["exp_ore_per_m"].to_numpy()
     explore = out["explore_per_m"].to_numpy()
     boundary = out["boundary_per_m"].to_numpy()
+    delin_pm = out["delin_per_m"].to_numpy(dtype=float)
     if cfg.standardize:
         ore, explore, boundary = _zscore(ore), _zscore(explore), _zscore(boundary)
+        delin_pm = _zscore(delin_pm)
     out["spacing_penalty"] = spacing_penalty(
         out[["x", "y"]].to_numpy(), drilled_xy, cfg.min_spacing_m, cfg.spacing_weight
     )
-    out["score"] = ore + cfg.beta * explore + cfg.gamma * boundary - out["spacing_penalty"]
+    out["score"] = (
+        cfg.ore_weight * ore
+        + cfg.beta * explore
+        + cfg.gamma * boundary
+        + cfg.delta * delin_pm
+        - out["spacing_penalty"]
+    )
     return out[SCORE_COLUMNS].sort_values("score", ascending=False).reset_index(drop=True)

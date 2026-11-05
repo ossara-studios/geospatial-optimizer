@@ -8,6 +8,7 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 
+from geoopt.blocks import block_centres, boundary_log_level
 from geoopt.config import PlannerConfig
 from geoopt.model.gp import OreModel
 from geoopt.planner.acquisition import score_candidates
@@ -49,8 +50,38 @@ def _require_available(state: PlannerState) -> None:
 class AdaptiveStrategy:
     name = "adaptive"
 
-    def __init__(self, cfg: PlannerConfig) -> None:
+    def __init__(self, cfg: PlannerConfig, seed: int = 0) -> None:
         self._cfg = cfg
+        self._rng = np.random.default_rng(seed)
+        self._pool: np.ndarray | None = None  # delineation target blocks, fixed per run
+
+    def _delineation(self, state: PlannerState, pts: pd.DataFrame) -> pd.Series:
+        """Targeted variance reduction per candidate hole (tIMSE, Picheny et al. 2010).
+
+        Targets: blocks near candidate geometry (no grades), weighted by the density of each
+        block's latent grade at the grade-above-cutoff boundary, sampled by that weight.
+        """
+        cfg, model = self._cfg, state.model
+        if self._pool is None:
+            blocks = block_centres(
+                state.points[["x", "y", "z"]].to_numpy(), cfg.block_size_m, cfg.block_radius_m
+            )
+            keep = self._rng.choice(len(blocks), min(cfg.delin_pool, len(blocks)), replace=False)
+            self._pool = blocks[np.sort(keep)]
+        mean, std = model.predict(self._pool)  # type: ignore[union-attr]
+        level = boundary_log_level(model.cutoff_pct, std, model.log_eps)  # type: ignore[union-attr]
+        w = np.exp(-0.5 * ((mean - level) / std) ** 2) / std
+        if not np.isfinite(w).all() or w.sum() <= 0:
+            return pd.Series(0.0, index=pts["hole_idx"].unique())
+        pick = self._rng.choice(len(w), cfg.delin_targets, replace=True, p=w / w.sum())
+        sub = pts.groupby("hole_idx", sort=False).nth(slice(None, None, cfg.delin_point_stride))
+        groups, red = model.variance_reduction(  # type: ignore[union-attr]
+            self._pool[pick],
+            np.full(len(pick), 1.0 / len(pick)),
+            sub[["x", "y", "z"]].to_numpy(),
+            sub["hole_idx"].to_numpy(),
+        )
+        return pd.Series(red, index=groups)
 
     def recommend(self, state: PlannerState) -> Recommendation:
         _require_available(state)
@@ -62,7 +93,10 @@ class AdaptiveStrategy:
         p_ore = state.model.prob_ore(xyz)
         _, std = state.model.predict(xyz)
         p_latent = state.model.prob_ore(xyz, include_noise=False) if self._cfg.gamma else None
-        scores = score_candidates(cand, pts, p_ore, std, state.drilled_xy, self._cfg, p_latent)
+        delin = self._delineation(state, pts) if self._cfg.delta else None
+        scores = score_candidates(
+            cand, pts, p_ore, std, state.drilled_xy, self._cfg, p_latent, delin
+        )
         best = scores.iloc[0]
         depth = float(cand.loc[cand["hole_idx"] == best["hole_idx"], "depth"].iloc[0])
         return Recommendation(
@@ -77,6 +111,7 @@ class AdaptiveStrategy:
                     "explore_per_m",
                     "explore",
                     "boundary_per_m",
+                    "delin_per_m",
                     "spacing_penalty",
                 )
             },
@@ -142,7 +177,7 @@ class HistoricalStrategy:
 
 def make_strategy(name: str, cfg: PlannerConfig, candidates: pd.DataFrame, seed: int) -> Strategy:
     if name == "adaptive":
-        return AdaptiveStrategy(cfg)
+        return AdaptiveStrategy(cfg, seed)
     if name == "random":
         return RandomStrategy(seed)
     if name == "grid":

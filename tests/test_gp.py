@@ -95,3 +95,27 @@ def test_refit_every_retunes(data: pd.DataFrame) -> None:
     more = data[data["hole_id"].isin(holes[5:15])]
     model.condition(more[["x", "y", "z"]].to_numpy(), more["cu"].to_numpy())
     assert model.hyperparameters() != hyper
+
+
+def test_variance_reduction_matches_conditioning() -> None:
+    """Closed-form reduction equals the drop in latent variance after actually conditioning."""
+    import copy
+
+    rng = np.random.default_rng(3)
+    df = _holes(8, rng)
+    cfg = CFG.model_copy(update={"device": "cpu", "dtype": "float64", "fit_iters": 30})
+    model = GPOreModel(cfg, seed=0)
+    model.fit(df[["x", "y", "z"]].to_numpy(), df["cu"].to_numpy())
+    targets = rng.uniform([0, 0, -200], [1000, 1000, 0], (40, 3))
+    w = rng.uniform(0.5, 1.5, len(targets))
+    groups = {7: rng.uniform([0, 0, -200], [1000, 1000, 0], (5, 3))}
+    groups[2] = rng.uniform([0, 0, -200], [1000, 1000, 0], (3, 3))
+    pts = np.vstack(list(groups.values()))
+    gid = np.concatenate([np.full(len(v), k) for k, v in groups.items()])
+    ids, red = model.variance_reduction(targets, w, pts, gid)
+    _, before = model.predict(targets)
+    for g, r in zip(ids, red, strict=True):
+        after_model = copy.deepcopy(model)
+        after_model.condition(groups[g], np.full(len(groups[g]), 0.5))
+        _, after = after_model.predict(targets)
+        assert r == pytest.approx(float(np.sum(w * (before**2 - after**2))), rel=1e-6)

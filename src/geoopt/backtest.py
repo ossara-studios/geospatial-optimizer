@@ -22,17 +22,32 @@ import plotly.graph_objects as go
 import torch
 from plotly.subplots import make_subplots
 from scipy.spatial import cKDTree
+from scipy.stats import norm
 
+from geoopt.blocks import block_agreement, block_centres, expected_grade
 from geoopt.config import AdaptiveVariant, Config, SeedSet
 from geoopt.data.prepare import prepare, prepared_paths
 from geoopt.logging_setup import configure_logging
 from geoopt.loop import IterationRecord
 from geoopt.metrics import classification, metres_to_target, on_metre_grid, ore_metres
+from geoopt.model.gp import GPOreModel
 from geoopt.run import build_inprocess_loop
 
 log = logging.getLogger(__name__)
 
-CURVE_METRICS = ["ore_m", "f1_undrilled", "bacc_undrilled", "f1_all", "f1_near", "bacc_near"]
+CURVE_METRICS = [
+    "ore_m",
+    "f1_undrilled",
+    "bacc_undrilled",
+    "f1_near",
+    "bacc_near",
+    "f1_undrilled_eg",
+    "bacc_undrilled_eg",
+    "f1_near_eg",
+    "bacc_near_eg",
+]
+BLOCK_METRICS = ["block_f1", "block_bacc", "block_ore_volume_err", "block_metal_err"]
+REFERENCE_FILE = "reference_blocks.parquet"
 
 
 def _seed_set_cfg(cfg: Config, ss: SeedSet, out_dir: Path) -> Config:
@@ -52,8 +67,48 @@ def _seed_set_cfg(cfg: Config, ss: SeedSet, out_dir: Path) -> Config:
     )
 
 
+def reference_blocks(cfg: Config, processed_dir: Path, out_dir: Path) -> Path:
+    """Reference block model: GP fitted on every hole's assays (written once per out_dir).
+
+    Blocks lie within block_radius_m of any assayed composite. Evaluation only: no strategy
+    sees it. Each strategy's block estimate is scored against it at metre checkpoints.
+    """
+    path = out_dir / REFERENCE_FILE
+    if path.exists():
+        return path
+    bt = cfg.backtest
+    paths = prepared_paths(processed_dir)
+    comps = pd.concat(
+        [pd.read_parquet(paths.seed_composites), pd.read_parquet(paths.heldout_composites)]
+    )
+    xyz, cu = comps[["x", "y", "z"]].to_numpy(), comps["cu"].to_numpy()
+    model = GPOreModel(cfg.model.model_copy(update={"max_train": bt.reference_max_train}), cfg.seed)
+    model.fit(xyz, cu)
+    blocks = block_centres(xyz, bt.block_size_m, bt.block_radius_m)
+    mean, std = model.predict(blocks)
+    grade = expected_grade(mean, std, cfg.model.log_eps)
+    ref = pd.DataFrame({"x": blocks[:, 0], "y": blocks[:, 1], "z": blocks[:, 2], "grade": grade})
+    ref.to_parquet(path, index=False)
+    log.info(
+        "reference blocks=%d ore_blocks=%d composites=%d",
+        len(blocks),
+        int((grade > cfg.model.cutoff_pct).sum()),
+        len(comps),
+    )
+    del model
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return path
+
+
 async def _one_run(
-    cfg: Config, seed_set: str, strategy: str, rng_seed: int, run_dir: Path, label: str = ""
+    cfg: Config,
+    seed_set: str,
+    strategy: str,
+    rng_seed: int,
+    run_dir: Path,
+    label: str = "",
+    ref_path: Path | None = None,
 ) -> pd.DataFrame:
     loop, lab = build_inprocess_loop(cfg, strategy, run_dir, rng_seed=rng_seed, write_grid=False)
     truth = lab.truth_for_scoring()
@@ -65,8 +120,11 @@ async def _one_run(
     actual = (truth["cu"] > cfg.model.cutoff_pct).to_numpy()
     cutoff, threshold = cfg.model.cutoff_pct, cfg.backtest.ore_threshold
     near_radius = cfg.backtest.near_radius_m
+    log_cut, eps = np.log(cutoff + cfg.model.log_eps), cfg.model.log_eps
+    ref = pd.read_parquet(ref_path) if ref_path is not None else None
+    block_every = cfg.backtest.block_every_m
     rows: list[dict] = []
-    found = {"ore_m": 0.0}
+    found = {"ore_m": 0.0, "next_block_m": 0.0}
 
     def score(record: IterationRecord | None) -> None:
         if record is not None and record.metres_drilled > 0:
@@ -74,21 +132,35 @@ async def _one_run(
             found["ore_m"] += ore_metres(released, cutoff)
             known.append(released[["x", "y", "z"]].to_numpy())
         undrilled = ~truth["hole_idx"].isin(loop.drilled_holes).to_numpy()
-        predicted = loop.model.prob_ore(xyz) > threshold
+        mean, std = loop.model.predict(xyz, include_noise=True)
+        predicted = norm.sf((log_cut - mean) / std) > threshold  # P(ore) > threshold
+        predicted_eg = expected_grade(mean, std, eps) > cutoff  # estimated grade > cutoff
         und = classification(predicted[undrilled], actual[undrilled])
+        und_eg = classification(predicted_eg[undrilled], actual[undrilled])
         dist, _ = cKDTree(np.vstack(known)).query(xyz, distance_upper_bound=near_radius)
         near = undrilled & np.isfinite(dist)
         nr = classification(predicted[near], actual[near])
+        nr_eg = classification(predicted_eg[near], actual[near])
+        metres = 0.0 if record is None else record.cumulative_metres
+        blocks = dict.fromkeys(BLOCK_METRICS, float("nan"))
+        if ref is not None and metres >= found["next_block_m"]:
+            b_mean, b_std = loop.model.predict(ref[["x", "y", "z"]].to_numpy())
+            blocks = block_agreement(
+                expected_grade(b_mean, b_std, eps), ref["grade"].to_numpy(), cutoff
+            )
+            found["next_block_m"] = (np.floor(metres / block_every) + 1) * block_every
         rows.append(
             {
                 "seed_set": seed_set,
                 "strategy": label or strategy,
                 "beta": cfg.planner.beta if strategy == "adaptive" else float("nan"),
                 "gamma": cfg.planner.gamma if strategy == "adaptive" else float("nan"),
+                "delta": cfg.planner.delta if strategy == "adaptive" else float("nan"),
+                "ore_weight": cfg.planner.ore_weight if strategy == "adaptive" else float("nan"),
                 "rng_seed": rng_seed,
                 "iteration": 0 if record is None else record.iteration,
                 "holes": len(loop.drilled_holes),
-                "cum_metres": 0.0 if record is None else record.cumulative_metres,
+                "cum_metres": metres,
                 "ore_m": found["ore_m"],
                 "f1_undrilled": und["f1"],
                 "bacc_undrilled": und["balanced_accuracy"],
@@ -98,7 +170,12 @@ async def _one_run(
                 "bacc_near": nr["balanced_accuracy"],
                 "n_near": nr["n"],
                 "ore_frac_near": float(actual[near].mean()) if near.any() else float("nan"),
+                "f1_undrilled_eg": und_eg["f1"],
+                "bacc_undrilled_eg": und_eg["balanced_accuracy"],
+                "f1_near_eg": nr_eg["f1"],
+                "bacc_near_eg": nr_eg["balanced_accuracy"],
             }
+            | blocks
         )
 
     score(None)
@@ -116,17 +193,20 @@ class _Job:
     rng_seed: int
     run_dir: Path
     label: str
+    ref_path: Path | None = None
 
 
 def _run_job(job: _Job) -> pd.DataFrame:
     t0 = time.perf_counter()
     df = asyncio.run(
-        _one_run(job.cfg, job.seed_set, job.strategy, job.rng_seed, job.run_dir, job.label)
+        _one_run(
+            job.cfg, job.seed_set, job.strategy, job.rng_seed, job.run_dir, job.label, job.ref_path
+        )
     )
     last = df.iloc[-1]
     log.info(
         "%s seed_set=%s strategy=%s rng=%s holes=%d metres=%.0f ore_m=%.0f "
-        "f1_undrilled=%.3f f1_near=%.3f seconds=%.0f",
+        "f1_undrilled=%.3f f1_undrilled_eg=%.3f block_f1=%.3f seconds=%.0f",
         job.tag,
         job.seed_set,
         job.label or job.strategy,
@@ -135,7 +215,8 @@ def _run_job(job: _Job) -> pd.DataFrame:
         last["cum_metres"],
         last["ore_m"],
         last["f1_undrilled"],
-        last["f1_near"],
+        last["f1_undrilled_eg"],
+        df["block_f1"].dropna().iloc[-1] if df["block_f1"].notna().any() else float("nan"),
         time.perf_counter() - t0,
     )
     return df
@@ -164,14 +245,18 @@ def run_backtest(cfg: Config, out_dir: Path | None = None, workers: int = 1) -> 
     out_dir = out_dir or bt.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     jobs = []
+    ref_path = None
     for ss in bt.seed_sets:
         ss_cfg = _seed_set_cfg(cfg, ss, out_dir)
         prepare(ss_cfg)
+        ref_path = ref_path or reference_blocks(cfg, ss_cfg.data.processed_dir, out_dir)
         for strategy in bt.strategies:
             seeds = bt.random_seeds if strategy == "random" else [cfg.seed]
             for rng_seed in seeds:
                 run_dir = out_dir / "runs" / ss.name / f"{strategy}-{rng_seed}"
-                jobs.append(_Job("backtest", ss_cfg, ss.name, strategy, rng_seed, run_dir, ""))
+                jobs.append(
+                    _Job("backtest", ss_cfg, ss.name, strategy, rng_seed, run_dir, "", ref_path)
+                )
     frames = _execute(jobs, workers, cfg.log_level)
     results = pd.concat(frames, ignore_index=True)
     results.to_parquet(out_dir / "results.parquet", index=False)
@@ -193,6 +278,15 @@ def run_boundary_sweep(cfg: Config, out_dir: Path | None = None, workers: int = 
     return _run_variants(cfg, variants, "boundary_sweep", out_dir, ["beta_sweep"], workers)
 
 
+def run_delineation_sweep(
+    cfg: Config, out_dir: Path | None = None, workers: int = 1
+) -> pd.DataFrame:
+    """Adaptive with the targeted variance-reduction term (`backtest.delineation_sweep`)."""
+    variants = cfg.backtest.delineation_sweep
+    join = ["beta_sweep", "boundary_sweep"]
+    return _run_variants(cfg, variants, "delineation_sweep", out_dir, join, workers)
+
+
 def _run_variants(
     cfg: Config,
     variants: list[AdaptiveVariant],
@@ -211,17 +305,18 @@ def _run_variants(
     sweep_dir = out_dir / name
     sweep_dir.mkdir(parents=True, exist_ok=True)
     jobs = []
+    ref_path = None
     for ss in bt.seed_sets:
         ss_cfg = _seed_set_cfg(cfg, ss, out_dir)
         prepare(ss_cfg)
+        ref_path = ref_path or reference_blocks(cfg, ss_cfg.data.processed_dir, out_dir)
         for v in variants:
-            v_cfg = ss_cfg.model_copy(
-                update={
-                    "planner": ss_cfg.planner.model_copy(update={"beta": v.beta, "gamma": v.gamma})
-                }
-            )
+            planner = ss_cfg.planner.model_copy(update=v.model_dump())
+            v_cfg = ss_cfg.model_copy(update={"planner": planner})
             run_dir = sweep_dir / "runs" / ss.name / v.label
-            jobs.append(_Job(name, v_cfg, ss.name, "adaptive", cfg.seed, run_dir, v.label))
+            jobs.append(
+                _Job(name, v_cfg, ss.name, "adaptive", cfg.seed, run_dir, v.label, ref_path)
+            )
     frames = _execute(jobs, workers, cfg.log_level)
     results = pd.concat(frames, ignore_index=True)
     others = [out_dir / "results.parquet"] + [out_dir / j / "results.parquet" for j in join or []]
@@ -230,7 +325,10 @@ def _run_variants(
             continue
         other = pd.read_parquet(path)
         other.loc[other["strategy"] == "adaptive", "strategy"] = AdaptiveVariant(
-            beta=cfg.planner.beta, gamma=cfg.planner.gamma
+            beta=cfg.planner.beta,
+            gamma=cfg.planner.gamma,
+            delta=cfg.planner.delta,
+            ore_weight=cfg.planner.ore_weight,
         ).label
         other = other[~other["strategy"].isin(set(results["strategy"]))]
         results = pd.concat([other, results], ignore_index=True)
@@ -244,20 +342,24 @@ def _run_variants(
 def summarize_backtest(results: pd.DataFrame, cfg: Config, with_estimates: bool = True) -> dict:
     """Per strategy: metric at fixed metre checkpoints and metres to the F1 target."""
     budget = cfg.backtest.metre_budget
-    checkpoints = np.array([0.25, 0.5, 1.0]) * budget
+    checkpoints = np.array(cfg.backtest.report_at_m or [0.25 * budget, 0.5 * budget, budget])
     out: dict = {
         "cutoff_pct": cfg.model.cutoff_pct,
         "metre_budget": budget,
         "f1_target": cfg.backtest.f1_target,
+        "block_f1_targets": cfg.backtest.block_f1_targets,
         "strategies": {},
     }
     for strategy, g in results.groupby("strategy"):
         runs = [r.sort_values("iteration") for _, r in g.groupby(["seed_set", "rng_seed"])]
         entry: dict = {"runs": len(runs)}
-        for metric in ("ore_m", "f1_undrilled", "bacc_undrilled", "f1_near", "bacc_near"):
-            if metric not in g:
+        for metric in CURVE_METRICS + BLOCK_METRICS:
+            if metric not in g or g[metric].isna().all():
                 continue
-            vals = np.array([on_metre_grid(r, metric, checkpoints) for r in runs])
+            if metric in BLOCK_METRICS:
+                vals = np.array([_block_at(r, metric, checkpoints) for r in runs])
+            else:
+                vals = np.array([on_metre_grid(r, metric, checkpoints) for r in runs])
             entry[metric] = {
                 f"at_{int(c)}m": {
                     "mean": float(np.nanmean(vals[:, i])),
@@ -280,11 +382,35 @@ def summarize_backtest(results: pd.DataFrame, cfg: Config, with_estimates: bool 
         entry["holes_to_f1_target_mean"] = (
             float(np.nanmean(holes_to_target)) if np.isfinite(holes_to_target).any() else None
         )
+        if "block_f1" in g and g["block_f1"].notna().any():
+            entry["metres_to_block_f1"] = {}
+            for target in cfg.backtest.block_f1_targets:
+                m = np.array(
+                    [
+                        metres_to_target(r.dropna(subset=["block_f1"]), "block_f1", target)
+                        for r in runs
+                    ]
+                )
+                hit = np.isfinite(m).any()
+                entry["metres_to_block_f1"][f"{target:g}"] = {
+                    "mean": float(np.nanmean(m)) if hit else None,
+                    "min": float(np.nanmin(m)) if hit else None,
+                    "max": float(np.nanmax(m)) if hit else None,
+                    "reached": int(np.isfinite(m).sum()),
+                }
         out["strategies"][strategy] = entry
     if with_estimates:
         out["environment_estimates"] = _env_estimates(out, cfg)
         out["discovery_equivalent"] = _discovery_equivalent(results, cfg)
     return out
+
+
+def _block_at(curve: pd.DataFrame, metric: str, checkpoints: np.ndarray) -> np.ndarray:
+    """Block metric at the first evaluation at or after each checkpoint (NaN if none)."""
+    scored = curve.dropna(subset=[metric])
+    x, y = scored["cum_metres"].to_numpy(), scored[metric].to_numpy()
+    idx = np.searchsorted(x, checkpoints, side="left")
+    return np.where(idx < len(x), y[np.clip(idx, 0, len(y) - 1)], np.nan)
 
 
 def _discovery_equivalent(results: pd.DataFrame, cfg: Config) -> dict:
@@ -296,9 +422,9 @@ def _discovery_equivalent(results: pd.DataFrame, cfg: Config) -> dict:
     """
     if "adaptive" not in set(results["strategy"]):
         return {}
-    budget = cfg.backtest.metre_budget
+    budget = cfg.backtest.discovery_at_m or cfg.backtest.metre_budget
     env = cfg.env
-    out: dict = {"label": "ESTIMATE", "factors_note": env.source_note, "vs": {}}
+    out: dict = {"label": "ESTIMATE", "factors_note": env.source_note, "at_m": budget, "vs": {}}
     for baseline in sorted(set(results["strategy"]) - {"adaptive"}):
         per_set = []
         for seed_set, g in results.groupby("seed_set"):
@@ -378,17 +504,25 @@ COLORS = {
     "adaptive-b0.5-g1": "#08519c",
     "adaptive-b0.5-g2": "#000000",
     "adaptive-b1-g1": "#9e0142",
+    "adaptive-b0.5-d1": "#1b9e77",
+    "adaptive-b0.5-d2": "#66a61e",
+    "adaptive-b1-d1": "#e7298a",
+    "adaptive-o0-b0-d1": "#a6761d",
 }
 
 
 def plot_backtest(results: pd.DataFrame, cfg: Config, path: Path) -> None:
     grid = np.linspace(0, cfg.backtest.metre_budget, 101)
-    metrics = ["ore_m", "f1_undrilled"] + (["f1_near"] if "f1_near" in results else [])
+    has_blocks = "block_f1" in results and results["block_f1"].notna().any()
+    metrics = ["ore_m", "f1_undrilled_eg"] + (["block_f1"] if has_blocks else [])
     titles = [
         f"Discovery: ore metres intersected (Cu > {cfg.model.cutoff_pct}%)",
-        "Delineation: F1 on all undrilled composites",
-        f"Delineation: F1 on undrilled composites within {cfg.backtest.near_radius_m:g} m of data",
+        "Delineation: F1 on undrilled composites (estimated grade > cutoff)",
+        "Delineation: block F1 vs the all-holes reference model",
     ]
+    if has_blocks:
+        runs_of = results.groupby(["strategy", "seed_set", "rng_seed"])["block_f1"]
+        results = results.assign(block_f1=runs_of.ffill())
     fig = make_subplots(rows=1, cols=len(metrics), subplot_titles=titles[: len(metrics)])
     for col, metric in enumerate(metrics, start=1):
         for strategy, g in results.groupby("strategy"):

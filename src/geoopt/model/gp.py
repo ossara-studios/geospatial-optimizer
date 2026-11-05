@@ -17,6 +17,7 @@ from geoopt.model.transforms import CoordScaler, to_log_grade
 log = logging.getLogger(__name__)
 
 _PREDICT_CHUNK = 2_000  # larger chunks build a dense test covariance and slow down sharply
+_GROUP_CHUNK = 64  # candidate holes per batch in variance_reduction (bounds GPU memory)
 
 
 class OreModel(Protocol):
@@ -119,6 +120,76 @@ class GPOreModel:
         cutoff = self._cfg.cutoff_pct if cutoff_pct is None else cutoff_pct
         mean, std = self.predict(xyz, include_noise=include_noise)
         return norm.sf((np.log(cutoff + self._cfg.log_eps) - mean) / std)
+
+    def variance_reduction(
+        self,
+        target_xyz: np.ndarray,
+        target_w: np.ndarray,
+        cand_xyz: np.ndarray,
+        cand_group: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Weighted drop in latent variance at targets if each group's points were sampled.
+
+        For group g with points P: sum_b w_b * k(b,P) [K(P,P) + noise I]^-1 k(P,b), all
+        covariances posterior to the current data. A GP's posterior variance doesn't depend on
+        the values observed, so this is exact without simulating assays. Returns (group ids,
+        reduction per group).
+        """
+        model, likelihood = self._require_fitted()
+        scaler = self._scaler
+        x_train = model.train_inputs[0]
+        kern = model.covar_module
+        noise = likelihood.noise.detach().reshape(())
+        groups, inverse = np.unique(np.asarray(cand_group), return_inverse=True)
+        sizes = np.bincount(inverse, minlength=len(groups))
+        m = int(sizes.max())
+        # Pad each group to m points: slot j of group g holds its j-th point (or nothing).
+        order = np.argsort(inverse, kind="stable")
+        starts = np.concatenate([[0], np.cumsum(sizes)[:-1]])
+        slot = np.arange(len(order)) - np.repeat(starts, sizes)
+        with torch.no_grad():
+            t = self._tensor(scaler.transform(target_xyz))  # type: ignore[union-attr]
+            p = self._tensor(scaler.transform(np.asarray(cand_xyz)[order]))  # type: ignore[union-attr]
+            k_xx = kern(x_train).to_dense()
+            k_xx.diagonal().add_(noise)
+            chol = torch.linalg.cholesky(k_xx)
+            v_t = torch.linalg.solve_triangular(chol, kern(x_train, t).to_dense(), upper=False)
+            v_p = torch.linalg.solve_triangular(chol, kern(x_train, p).to_dense(), upper=False)
+            c_tp = kern(t, p).to_dense() - v_t.T @ v_p  # posterior cov targets x points
+            w = self._tensor(np.asarray(target_w, dtype=float))
+            eye = torch.eye(m, dtype=self._dtype, device=self._device)
+            out = np.empty(len(groups))
+            g_of = inverse[order]
+            for lo in range(0, len(groups), _GROUP_CHUNK):
+                hi = min(lo + _GROUP_CHUNK, len(groups))
+                sel = np.flatnonzero((g_of >= lo) & (g_of < hi))
+                g_idx = torch.as_tensor(g_of[sel] - lo, device=self._device)
+                s_idx = torch.as_tensor(slot[sel], device=self._device)
+                sel_t = torch.as_tensor(sel, device=self._device)
+                n_g = hi - lo
+                # Posterior covariance among each group's points; padded slots are identity.
+                pts = torch.zeros(n_g, m, 3, dtype=self._dtype, device=self._device)
+                pts[g_idx, s_idx] = p[sel_t]
+                vp = torch.zeros(n_g, m, v_p.shape[0], dtype=self._dtype, device=self._device)
+                vp[g_idx, s_idx] = v_p[:, sel_t].T
+                mask = torch.zeros(n_g, m, dtype=torch.bool, device=self._device)
+                mask[g_idx, s_idx] = True
+                k_pp = kern(pts).to_dense() - vp @ vp.transpose(1, 2)
+                s = torch.where(mask[:, :, None] & mask[:, None, :], k_pp, 0.0) + noise * eye
+                s = s + torch.where(mask, 0.0, 1.0)[:, :, None] * eye
+                c = torch.zeros(n_g, m, len(t), dtype=self._dtype, device=self._device)
+                c[g_idx, s_idx] = c_tp[:, sel_t].T
+                sol = torch.cholesky_solve(c, torch.linalg.cholesky(s))
+                out[lo:hi] = ((c * sol).sum(dim=1) * w).sum(dim=1).double().cpu().numpy()
+        return groups, out
+
+    @property
+    def cutoff_pct(self) -> float:
+        return self._cfg.cutoff_pct
+
+    @property
+    def log_eps(self) -> float:
+        return self._cfg.log_eps
 
     @property
     def n_train(self) -> int:

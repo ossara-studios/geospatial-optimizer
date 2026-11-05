@@ -7,7 +7,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from geoopt.backtest import run_backtest, run_beta_sweep, run_boundary_sweep
+from geoopt.backtest import (
+    run_backtest,
+    run_beta_sweep,
+    run_boundary_sweep,
+    run_delineation_sweep,
+)
 from geoopt.config import AdaptiveVariant, Config, SeedSet
 from geoopt.metrics import classification, metres_to_target, on_metre_grid, ore_metres
 
@@ -42,6 +47,8 @@ def test_backtest_same_budget_for_every_strategy(prepared_cfg: Config, tmp_path:
                         SeedSet(name="b", method="spread", n_seed=5, seed=2),
                     ],
                     "metre_budget": 300.0,
+                    "report_at_m": [150.0, 300.0],
+                    "block_every_m": 100.0,
                     "max_holes": 50,
                 }
             )
@@ -66,6 +73,13 @@ def test_backtest_same_budget_for_every_strategy(prepared_cfg: Config, tmp_path:
     assert set(summary["discovery_equivalent"]["vs"]) == {"grid", "random"}
     assert summary["discovery_equivalent"]["label"] == "ESTIMATE"
     assert (tmp_path / "bt" / "backtest.html").exists()
+    # Block metrics: scored before drilling and at each block_every_m crossing.
+    assert results.loc[results["iteration"] == 0, "block_f1"].notna().all()
+    assert results["block_f1"].between(0, 1).all() or results["block_f1"].isna().any()
+    assert "block_f1" in summary["strategies"]["adaptive"]
+    assert set(summary["strategies"]["adaptive"]["block_f1"]) == {"at_150m", "at_300m"}
+    assert "f1_undrilled_eg" in summary["strategies"]["grid"]
+    assert (tmp_path / "bt" / "reference_blocks.parquet").exists()
 
 
 def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) -> None:
@@ -80,6 +94,9 @@ def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) ->
                     "max_holes": 50,
                     "beta_sweep": [2.0],
                     "boundary_sweep": [AdaptiveVariant(beta=0.5, gamma=1.0)],
+                    "delineation_sweep": [
+                        AdaptiveVariant(beta=0.0, delta=1.0, ore_weight=0.0),
+                    ],
                 }
             )
         }
@@ -94,6 +111,10 @@ def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) ->
     boundary = run_boundary_sweep(cfg, tmp_path / "bt")
     assert set(boundary["strategy"]) == labels | {"adaptive-b0.5-g1"}
     assert set(boundary.loc[boundary["strategy"] == "adaptive-b0.5-g1", "gamma"]) == {1.0}
+    delin = run_delineation_sweep(cfg, tmp_path / "bt")
+    pure = delin[delin["strategy"] == "adaptive-o0-b0-d1"]
+    assert set(pure["delta"]) == {1.0} and set(pure["ore_weight"]) == {0.0}
+    assert set(delin["strategy"]) == set(boundary["strategy"]) | {"adaptive-o0-b0-d1"}
 
 
 def test_parallel_workers_match_serial(prepared_cfg: Config, tmp_path: Path) -> None:

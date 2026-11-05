@@ -11,7 +11,12 @@ from typing import Annotated
 
 import typer
 
-from geoopt.backtest import run_backtest, run_beta_sweep, run_boundary_sweep
+from geoopt.backtest import (
+    run_backtest,
+    run_beta_sweep,
+    run_boundary_sweep,
+    run_delineation_sweep,
+)
 from geoopt.config import DEFAULT_CONFIG_PATH, load_config
 from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
@@ -75,11 +80,21 @@ def backtest(
         bool,
         typer.Option("--boundary-sweep", help="Adaptive only, at each backtest.boundary_sweep."),
     ] = False,
+    delineation_sweep: Annotated[
+        bool,
+        typer.Option(
+            "--delineation-sweep", help="Adaptive only, at each backtest.delineation_sweep."
+        ),
+    ] = False,
     workers: Annotated[int, typer.Option(help="Parallel runs (processes).")] = 1,
 ) -> None:
     """Run every strategy over every seed set with the same metre budget."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
+    if delineation_sweep:
+        run_delineation_sweep(cfg, workers=workers)
+        typer.echo(f"wrote {cfg.backtest.out_dir / 'delineation_sweep'}")
+        return
     if boundary_sweep:
         run_boundary_sweep(cfg, workers=workers)
         typer.echo(f"wrote {cfg.backtest.out_dir / 'boundary_sweep'}")
