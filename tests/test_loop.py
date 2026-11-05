@@ -82,3 +82,20 @@ async def test_rejected_holes_are_excluded(prepared_cfg: Config, tmp_path: Path)
     records = await loop.run()
     assert len(records) == meta["n_candidates"]
     assert all(r.check_status == "REJECTED" and r.metres_drilled == 0 for r in records)
+
+
+async def test_assay_lag_delays_conditioning(prepared_cfg: Config, tmp_path: Path) -> None:
+    prepare(prepared_cfg)
+    lag = 2
+    cfg = prepared_cfg.model_copy(
+        update={"loop": prepared_cfg.loop.model_copy(update={"assay_lag_holes": lag})}
+    )
+    loop, _ = build_inprocess_loop(cfg, "random", tmp_path / "run", write_grid=False)
+    n_seed = loop._model.n_train
+    seen = []
+    loop.on_iteration = lambda r: seen.append(loop._model.n_train)
+    records = await loop.run()
+    sizes = [r.composites_ingested for r in records]
+    # After hole i, the model holds the assays of holes 1..i-lag only.
+    for i, n in enumerate(seen, start=1):
+        assert n == n_seed + sum(sizes[: max(0, i - lag)])

@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from geoopt.backtest import (
+    run_assay_delay_sweep,
     run_backtest,
     run_beta_sweep,
     run_boundary_sweep,
@@ -115,6 +116,17 @@ def test_beta_sweep_joins_main_backtest(prepared_cfg: Config, tmp_path: Path) ->
     pure = delin[delin["strategy"] == "adaptive-o0-b0-d1"]
     assert set(pure["delta"]) == {1.0} and set(pure["ore_weight"]) == {0.0}
     assert set(delin["strategy"]) == set(boundary["strategy"]) | {"adaptive-o0-b0-d1"}
+    delay = run_assay_delay_sweep(
+        cfg.model_copy(
+            update={
+                "backtest": cfg.backtest.model_copy(
+                    update={"assay_delay_sweep": [3], "assay_delay_beta": 2.0}
+                )
+            }
+        ),
+        tmp_path / "bt",
+    )
+    assert set(delay["strategy"]) == labels | {"adaptive-b2-lag3"}
 
 
 def test_parallel_workers_match_serial(prepared_cfg: Config, tmp_path: Path) -> None:

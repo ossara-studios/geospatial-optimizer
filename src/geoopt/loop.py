@@ -1,6 +1,7 @@
 """The bridge-agnostic decision loop (state machine in docs/eae_contract.md).
 
 recommend -> check -> approve -> dispatch -> complete -> ingest lab results -> condition.
+With `assay_lag_holes` = k, a hole's results condition the model only after k more holes.
 The loop only sees grades through the lab drop folder; it never touches held-out data.
 """
 
@@ -9,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections import deque
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -85,6 +87,8 @@ class DecisionLoop:
             model=model,
         )
         self.records: list[IterationRecord] = []
+        # Drilled holes whose assays the lab hasn't returned yet (oldest first).
+        self._pending: deque[pd.DataFrame] = deque()
         self._req_id = 0
         self._metres = 0.0
 
@@ -176,8 +180,12 @@ class DecisionLoop:
 
         t4 = time.perf_counter()
         lab = pd.read_parquet(self._lab_dir / f"{msg.hole_idx}.parquet")
-        if len(lab):
-            self._model.condition(lab[["x", "y", "z"]].to_numpy(), lab["cu"].to_numpy())
+        self._pending.append(lab)
+        # With a lag of k, a hole's assays arrive once k more holes have been drilled.
+        while len(self._pending) > self._cfg.assay_lag_holes:
+            ready = self._pending.popleft()
+            if len(ready):
+                self._model.condition(ready[["x", "y", "z"]].to_numpy(), ready["cu"].to_numpy())
         t["condition"] = time.perf_counter() - t4
 
         self.state.available.discard(msg.hole_idx)

@@ -96,6 +96,8 @@ backtest:
     - {beta: 0.5, gamma: 2.0}
     - {beta: 1.0, gamma: 1.0}
   beta_sweep: [1.0, 2.0, 4.0]  # fixed before seeing sweep results; planner.beta is the base
+  assay_delay_sweep: [5, 10]   # lab turnaround in holes; fixed before seeing results
+  assay_delay_beta: 1.0
   delineation_sweep:    # targeted variance reduction (delta); fixed before seeing its results
     - {beta: 0.5, delta: 1.0}
     - {beta: 0.5, delta: 2.0}

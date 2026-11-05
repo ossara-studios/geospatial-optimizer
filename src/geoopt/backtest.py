@@ -196,12 +196,26 @@ class _Job:
     ref_path: Path | None = None
 
 
+def _cache_dump(cfg: Config) -> dict:
+    """Config as a cache key, without settings a single run doesn't depend on.
+
+    Sweep lists only choose which runs exist, and a zero assay lag is the behaviour runs had
+    before the setting existed, so neither invalidates saved curves.
+    """
+    d = cfg.model_dump(mode="json")
+    for k in ("assay_delay_sweep", "assay_delay_beta"):
+        d["backtest"].pop(k, None)
+    if d["loop"].get("assay_lag_holes") == 0:
+        d["loop"].pop("assay_lag_holes")
+    return d
+
+
 def _run_job(job: _Job) -> pd.DataFrame:
     """One run. Its curve is saved in the run dir and reused while the config is unchanged."""
     curve = job.run_dir / "curve.parquet"
     stamp = job.run_dir / "curve_config.json"
     key = json.dumps(
-        job.cfg.model_dump(mode="json")
+        _cache_dump(job.cfg)
         | {"strategy": job.strategy, "rng_seed": job.rng_seed, "label": job.label},
         sort_keys=True,
     )
@@ -302,6 +316,17 @@ def run_delineation_sweep(
     return _run_variants(cfg, variants, "delineation_sweep", out_dir, join, workers)
 
 
+def run_assay_delay_sweep(
+    cfg: Config, out_dir: Path | None = None, workers: int = 1
+) -> pd.DataFrame:
+    """Adaptive at `backtest.assay_delay_beta` with assays arriving each lag (holes) late."""
+    bt = cfg.backtest
+    variants = [AdaptiveVariant(beta=bt.assay_delay_beta)] * len(bt.assay_delay_sweep)
+    return _run_variants(
+        cfg, variants, "assay_delay", out_dir, ["beta_sweep"], workers, bt.assay_delay_sweep
+    )
+
+
 def _run_variants(
     cfg: Config,
     variants: list[AdaptiveVariant],
@@ -309,6 +334,7 @@ def _run_variants(
     out_dir: Path | None,
     join: list[str] | None = None,
     workers: int = 1,
+    lags: list[int] | None = None,
 ) -> pd.DataFrame:
     """Adaptive variants on the main backtest's seed sets and budget, in `<out_dir>/<name>/`.
 
@@ -325,13 +351,13 @@ def _run_variants(
         ss_cfg = _seed_set_cfg(cfg, ss, out_dir)
         prepare(ss_cfg)
         ref_path = ref_path or reference_blocks(cfg, ss_cfg.data.processed_dir, out_dir)
-        for v in variants:
+        for v, lag in zip(variants, lags or [0] * len(variants), strict=True):
             planner = ss_cfg.planner.model_copy(update=v.model_dump())
-            v_cfg = ss_cfg.model_copy(update={"planner": planner})
-            run_dir = sweep_dir / "runs" / ss.name / v.label
-            jobs.append(
-                _Job(name, v_cfg, ss.name, "adaptive", cfg.seed, run_dir, v.label, ref_path)
-            )
+            loop = ss_cfg.loop.model_copy(update={"assay_lag_holes": lag})
+            v_cfg = ss_cfg.model_copy(update={"planner": planner, "loop": loop})
+            label = v.label + (f"-lag{lag}" if lag else "")
+            run_dir = sweep_dir / "runs" / ss.name / label
+            jobs.append(_Job(name, v_cfg, ss.name, "adaptive", cfg.seed, run_dir, label, ref_path))
     frames = _execute(jobs, workers, cfg.log_level)
     results = pd.concat(frames, ignore_index=True)
     others = [out_dir / "results.parquet"] + [out_dir / j / "results.parquet" for j in join or []]

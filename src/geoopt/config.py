@@ -162,6 +162,8 @@ class LoopConfig(_Strict):
     max_metres: float | None = Field(None, gt=0)
     # Fixed 3D evaluation grid (nx, ny, nz) written each iteration for the visualizer.
     eval_grid: tuple[int, int, int] = (30, 30, 12)
+    # Assays reach the model only after this many more holes are drilled (lab turnaround).
+    assay_lag_holes: int = Field(0, ge=0)
     # Lab drop folder shared by the rig simulator and the planner in OPC UA mode.
     live_lab_dir: Path
 
@@ -215,6 +217,9 @@ class BacktestConfig(_Strict):
     beta_sweep: list[float] = []  # extra adaptive betas for `geoopt backtest --beta-sweep`
     boundary_sweep: list[AdaptiveVariant] = []  # for `geoopt backtest --boundary-sweep`
     delineation_sweep: list[AdaptiveVariant] = []  # for `geoopt backtest --delineation-sweep`
+    # `geoopt backtest --assay-delay-sweep`: adaptive at assay_delay_beta, each lag in holes.
+    assay_delay_sweep: list[int] = []
+    assay_delay_beta: float = Field(1.0, ge=0)
 
 
 class EnvFactors(_Strict):

@@ -12,6 +12,7 @@ from typing import Annotated
 import typer
 
 from geoopt.backtest import (
+    run_assay_delay_sweep,
     run_backtest,
     run_beta_sweep,
     run_boundary_sweep,
@@ -86,11 +87,22 @@ def backtest(
             "--delineation-sweep", help="Adaptive only, at each backtest.delineation_sweep."
         ),
     ] = False,
+    assay_delay_sweep: Annotated[
+        bool,
+        typer.Option(
+            "--assay-delay-sweep",
+            help="Adaptive at backtest.assay_delay_beta with each backtest.assay_delay_sweep lag.",
+        ),
+    ] = False,
     workers: Annotated[int, typer.Option(help="Parallel runs (processes).")] = 1,
 ) -> None:
     """Run every strategy over every seed set with the same metre budget."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
+    if assay_delay_sweep:
+        run_assay_delay_sweep(cfg, workers=workers)
+        typer.echo(f"wrote {cfg.backtest.out_dir / 'assay_delay'}")
+        return
     if delineation_sweep:
         run_delineation_sweep(cfg, workers=workers)
         typer.echo(f"wrote {cfg.backtest.out_dir / 'delineation_sweep'}")
