@@ -154,31 +154,34 @@ class GPOreModel:
             k_xx.diagonal().add_(noise)
             chol = torch.linalg.cholesky(k_xx)
             v_t = torch.linalg.solve_triangular(chol, kern(x_train, t).to_dense(), upper=False)
-            v_p = torch.linalg.solve_triangular(chol, kern(x_train, p).to_dense(), upper=False)
-            c_tp = kern(t, p).to_dense() - v_t.T @ v_p  # posterior cov targets x points
             w = self._tensor(np.asarray(target_w, dtype=float))
             eye = torch.eye(m, dtype=self._dtype, device=self._device)
             out = np.empty(len(groups))
             g_of = inverse[order]
+            # Chunk over groups so no train x all-points matrix is ever built (GPU memory).
             for lo in range(0, len(groups), _GROUP_CHUNK):
                 hi = min(lo + _GROUP_CHUNK, len(groups))
                 sel = np.flatnonzero((g_of >= lo) & (g_of < hi))
                 g_idx = torch.as_tensor(g_of[sel] - lo, device=self._device)
                 s_idx = torch.as_tensor(slot[sel], device=self._device)
-                sel_t = torch.as_tensor(sel, device=self._device)
+                p_c = p[torch.as_tensor(sel, device=self._device)]
+                v_p = torch.linalg.solve_triangular(
+                    chol, kern(x_train, p_c).to_dense(), upper=False
+                )
+                c_tp = kern(t, p_c).to_dense() - v_t.T @ v_p  # posterior cov, targets x points
                 n_g = hi - lo
                 # Posterior covariance among each group's points; padded slots are identity.
                 pts = torch.zeros(n_g, m, 3, dtype=self._dtype, device=self._device)
-                pts[g_idx, s_idx] = p[sel_t]
+                pts[g_idx, s_idx] = p_c
                 vp = torch.zeros(n_g, m, v_p.shape[0], dtype=self._dtype, device=self._device)
-                vp[g_idx, s_idx] = v_p[:, sel_t].T
+                vp[g_idx, s_idx] = v_p.T
                 mask = torch.zeros(n_g, m, dtype=torch.bool, device=self._device)
                 mask[g_idx, s_idx] = True
                 k_pp = kern(pts).to_dense() - vp @ vp.transpose(1, 2)
                 s = torch.where(mask[:, :, None] & mask[:, None, :], k_pp, 0.0) + noise * eye
                 s = s + torch.where(mask, 0.0, 1.0)[:, :, None] * eye
                 c = torch.zeros(n_g, m, len(t), dtype=self._dtype, device=self._device)
-                c[g_idx, s_idx] = c_tp[:, sel_t].T
+                c[g_idx, s_idx] = c_tp.T
                 sol = torch.cholesky_solve(c, torch.linalg.cholesky(s))
                 out[lo:hi] = ((c * sol).sum(dim=1) * w).sum(dim=1).double().cpu().numpy()
         return groups, out
