@@ -197,6 +197,19 @@ class _Job:
 
 
 def _run_job(job: _Job) -> pd.DataFrame:
+    """One run. Its curve is saved in the run dir and reused while the config is unchanged."""
+    curve = job.run_dir / "curve.parquet"
+    stamp = job.run_dir / "curve_config.json"
+    key = json.dumps(
+        job.cfg.model_dump(mode="json")
+        | {"strategy": job.strategy, "rng_seed": job.rng_seed, "label": job.label},
+        sort_keys=True,
+    )
+    if curve.exists() and stamp.exists() and stamp.read_text() == key:
+        log.info(
+            "%s seed_set=%s strategy=%s reused", job.tag, job.seed_set, job.label or job.strategy
+        )
+        return pd.read_parquet(curve)
     t0 = time.perf_counter()
     df = asyncio.run(
         _one_run(
@@ -219,6 +232,8 @@ def _run_job(job: _Job) -> pd.DataFrame:
         df["block_f1"].dropna().iloc[-1] if df["block_f1"].notna().any() else float("nan"),
         time.perf_counter() - t0,
     )
+    df.to_parquet(curve, index=False)
+    stamp.write_text(key)
     return df
 
 

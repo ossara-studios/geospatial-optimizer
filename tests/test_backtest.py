@@ -134,3 +134,8 @@ def test_parallel_workers_match_serial(prepared_cfg: Config, tmp_path: Path) -> 
     serial = run_backtest(cfg, tmp_path / "serial")
     parallel = run_backtest(cfg, tmp_path / "parallel", workers=2)
     pd.testing.assert_frame_equal(serial, parallel)
+    # A rerun reuses each saved run curve and gives the same results.
+    assert all(
+        (d / "curve.parquet").exists() for d in (tmp_path / "serial" / "runs" / "a").iterdir()
+    )
+    pd.testing.assert_frame_equal(serial, run_backtest(cfg, tmp_path / "serial"))
