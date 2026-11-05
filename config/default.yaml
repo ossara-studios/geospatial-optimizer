@@ -80,7 +80,7 @@ backtest:
   metre_budget: 60000.0
   report_at_m: [3750.0, 7500.0, 15000.0, 30000.0, 60000.0]
   discovery_at_m: 15000.0   # discovery-equivalent savings, comparable with earlier results
-  max_holes: 500
+  max_holes: 800         # above the 706-hole pool: runs end on the metre budget
   ore_threshold: 0.5
   f1_target: 0.6
   near_radius_m: 50.0   # near-data delineation zone; fixed before seeing its results
