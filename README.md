@@ -20,12 +20,12 @@ python3 -m venv .venv
 The ore model uses the GPU automatically when PyTorch can see one (`model.device: auto`), in
 float32; otherwise it runs on the CPU in float64. The two agree on 99.97 % of ore calls.
 PyPI's Windows torch wheel is CPU-only, so after the steps above install the CUDA build of the
-same version. Pick the CUDA tag for your driver in the selector at https://pytorch.org; `cu128`
-is an example:
+same version. torch 2.15.0 ships `cu132` and `cu134`; `cu132` runs on any driver that reports
+CUDA 13.x in `nvidia-smi` (tested on 581.42, CUDA 13.0):
 ```powershell
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.lock
-.venv\Scripts\pip install --force-reinstall --no-deps torch==2.15.0 --index-url https://download.pytorch.org/whl/cu128
+.venv\Scripts\pip install --force-reinstall --no-deps torch==2.15.0 --index-url https://download.pytorch.org/whl/cu132
 .venv\Scripts\pip install --no-deps -e .
 .venv\Scripts\python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
 ```
