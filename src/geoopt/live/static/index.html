@@ -9,179 +9,185 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f141a;
-    --surface: #131920;
-    --raise: #19202a;
-    --rule: #252d38;
-    --rule-soft: #1c232d;
-    --text: #d6dbe1;
-    --text-2: #9aa4b1;
-    --text-3: #6f7a88;
-    --teal: #4fae9f;
-    --teal-dim: #2c5f58;
-    --gold: #d9a64a;
-    --gold-hi: #f0c46a;
-    --waste: #586371;
-    --alert: #c9705f;
+    /* surfaces, darkest to lightest: workspace < sidebar < chrome < plot */
+    --app: #0a0e13;
+    --side: #0d1217;
+    --chrome: #10151b;
+    --plot: #131a22;
+    --rule: #1f2731;
+    --rule-2: #2a333f;
+    --text: #dfe4ea;
+    --text-2: #a7b0bc;
+    --text-3: #7d8896;
+    --teal: #55b3a4;
+    --gold: #d6a44c;
+    --gold-hi: #efc36c;
+    --waste: #5e6977;
+    --alert: #cf7564;
     --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --pad: 20px;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.45 var(--sans);
-    -webkit-font-smoothing: antialiased; }
-  .mono { font-family: var(--mono); font-feature-settings: "zero" 0; }
-  .eyebrow { font-size: 10.5px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+  html, body { margin: 0; background: var(--app); color: var(--text); font: 13px/1.45 var(--sans);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .eyebrow { font: 500 10.5px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+  .key { font: 500 10px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-right: 7px; }
 
   /* App bar */
-  .bar { display: flex; align-items: center; gap: 24px; height: 44px; padding: 0 20px;
-    border-bottom: 1px solid var(--rule); background: var(--surface); }
+  .bar { display: flex; align-items: center; gap: 28px; height: 46px; padding: 0 var(--pad);
+    background: var(--chrome); border-bottom: 1px solid var(--rule); }
   .mark { display: flex; align-items: baseline; gap: 10px; white-space: nowrap; }
-  .mark b { font-weight: 600; font-size: 13.5px; letter-spacing: .01em; }
-  .mark span { color: var(--text-3); }
-  .meta { display: flex; gap: 18px; color: var(--text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; }
-  .meta em { font-style: normal; color: var(--text-3); margin-right: 6px; }
+  .mark b { font-weight: 600; font-size: 13.5px; letter-spacing: 0; }
+  .mark span { color: var(--text-3); font-size: 12.5px; }
+  .meta { display: flex; gap: 22px; align-items: baseline; color: var(--text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; }
   .grow { flex: 1; }
   .link { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
   .link i { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); }
   .link.on i { background: var(--teal); }
 
-  /* Workflow stepper */
-  .steps { display: flex; align-items: stretch; height: 38px; padding: 0 20px; border-bottom: 1px solid var(--rule);
-    background: var(--bg); overflow-x: auto; }
-  .step { display: flex; align-items: center; gap: 8px; padding: 0 16px 0 0; margin-right: 16px; color: var(--text-3);
-    white-space: nowrap; position: relative; font-size: 12.5px; }
-  .step .n { font-family: var(--mono); font-size: 10.5px; color: var(--text-3); }
-  .step::after { content: ""; width: 18px; height: 1px; background: var(--rule); margin-left: 16px; }
-  .step:last-of-type::after { display: none; }
+  /* Decision cycle */
+  .steps { display: flex; align-items: stretch; height: 40px; padding: 0 var(--pad); background: var(--chrome);
+    border-bottom: 1px solid var(--rule); overflow-x: auto; }
+  .step { display: flex; align-items: center; gap: 9px; color: var(--text-3); white-space: nowrap; position: relative;
+    font-size: 12.5px; padding-right: 14px; }
+  .step .n { font: 500 10.5px var(--mono); color: var(--text-3); }
+  .sep { width: 20px; height: 1px; background: var(--rule-2); align-self: center; margin-right: 14px; }
   .step.done { color: var(--text-2); }
   .step.done .n { color: var(--teal); }
-  .step.active { color: var(--text); }
+  .step.active { color: var(--text); font-weight: 500; }
   .step.active .n { color: var(--teal); }
-  .step.active::before { content: ""; position: absolute; left: 0; right: 34px; bottom: -1px; height: 2px; background: var(--teal); }
-  .step:last-of-type.active::before { right: 16px; }
+  .step.active::after, .step.bad::after { content: ""; position: absolute; left: 0; right: 14px; bottom: -1px; height: 2px; background: var(--teal); }
   .step.bad { color: var(--alert); }
   .step.bad .n { color: var(--alert); }
-  .step.bad::before { content: ""; position: absolute; left: 0; right: 34px; bottom: -1px; height: 2px; background: var(--alert); }
-  .req { margin-left: auto; display: flex; align-items: center; gap: 16px; color: var(--text-2); font-size: 11.5px; white-space: nowrap; }
-  .req em { font-style: normal; color: var(--text-3); margin-right: 6px; }
+  .step.bad::after { background: var(--alert); }
+  .req { margin-left: auto; display: flex; align-items: center; gap: 22px; color: var(--text); font-size: 11.5px; white-space: nowrap; padding-left: 24px; }
 
   /* Instrument panel */
-  .panel { display: grid; grid-template-columns: 2fr 2fr 2fr; border-bottom: 1px solid var(--rule); background: var(--surface); }
-  .group { padding: 10px 20px 12px; border-right: 1px solid var(--rule); min-width: 0; }
-  .group:last-child { border-right: 0; }
-  .group .eyebrow { margin-bottom: 8px; }
-  .cells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
-  .cell { min-width: 0; }
-  .cell + .cell { border-left: 1px solid var(--rule-soft); padding-left: 20px; }
-  .cell .l { color: var(--text-2); font-size: 12px; }
-  .cell .v { font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: -.01em; line-height: 1.25;
-    font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .cell .v small { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: 4px; letter-spacing: 0; }
-  .cell .s { font-family: var(--mono); font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .panel { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
+    background: var(--chrome); border-bottom: 1px solid var(--rule-2); }
+  .group { padding: 14px var(--pad) 16px; min-width: 0; }
+  .group + .group { border-left: 1px solid var(--rule); }
+  .group .eyebrow { margin-bottom: 12px; }
+  .cells { display: flex; align-items: flex-start; gap: 0; }
+  .cell { min-width: 0; padding-right: 24px; }
+  .cell + .cell { padding-left: 24px; border-left: 1px solid var(--rule); }
+  .cell .l { color: var(--text-2); font-size: 12px; margin-bottom: 4px; white-space: nowrap; }
+  .cell .v { height: 32px; display: flex; align-items: flex-end; font: 500 20px/1 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -.01em; white-space: nowrap; }
+  .cell .v small { font: 400 11.5px/1 var(--mono); color: var(--text-3); margin-left: 5px; letter-spacing: 0; padding-bottom: 2px; }
+  .cell .s { font: 400 11px/1.3 var(--mono); color: var(--text-3); margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cell.primary .v { font-size: 28px; letter-spacing: -.02em; }
   .cell.ore .v { color: var(--gold-hi); }
   .cell.pos .v { color: var(--teal); }
-  .cell.neg .v { color: var(--text-2); }
 
   /* Workspace */
-  .work { display: grid; grid-template-columns: minmax(0, 1fr) 440px; min-height: 0; }
-  .pane { min-width: 0; }
-  .pane + .pane { border-left: 1px solid var(--rule); }
-  .head { display: flex; align-items: baseline; gap: 16px; padding: 12px 20px 8px; flex-wrap: wrap; }
-  .head h2 { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: .01em; }
-  .kv { display: flex; gap: 18px; flex-wrap: wrap; color: var(--text); font-size: 11.5px; }
-  .kv span em { font-style: normal; color: var(--text-3); margin-right: 6px; font-family: var(--sans); font-size: 10.5px;
-    letter-spacing: .06em; text-transform: uppercase; }
-  .kv .hole { color: var(--teal); }
-  .viz { padding: 0 20px; }
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 452px; }
+  .main { min-width: 0; background: var(--app); }
+  .side { min-width: 0; background: var(--side); border-left: 1px solid var(--rule-2); }
+  .head { display: flex; align-items: baseline; gap: 20px; padding: 14px var(--pad) 10px; flex-wrap: wrap; min-height: 42px; }
+  .head h2 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0; }
+  .head .aside { margin-left: auto; color: var(--text-3); font-size: 11px; }
+  .kv { display: flex; gap: 20px; flex-wrap: wrap; align-items: baseline; color: var(--text); font-size: 11.5px; }
+  .kv .hole { color: var(--teal); font-weight: 500; }
+  .viz { padding: 0 var(--pad); }
   canvas { display: block; width: 100%; }
-  #section { height: max(420px, calc(100vh - 262px)); }
-  #plan { height: 340px; }
-  #chart { height: 120px; }
-  .legend { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; padding: 10px 20px 14px; color: var(--text-2); font-size: 11.5px; }
+  #section { height: max(420px, calc(100vh - 290px)); }
+  #plan { height: 330px; }
+  #chart { height: 150px; }
+  .legend { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; padding: 12px var(--pad) 16px; color: var(--text-2); font-size: 11.5px; }
   .legend > span { display: inline-flex; align-items: center; gap: 8px; }
-  .bands { display: inline-flex; align-items: center; gap: 0; }
-  .bands i { width: 18px; height: 8px; display: inline-block; }
-  .bands b { font: 400 10.5px var(--mono); color: var(--text-3); margin: 0 6px; }
-  .mk { display: inline-block; }
-  .mk.ore { width: 14px; height: 4px; background: var(--gold-hi); }
+  .cbar { display: inline-grid; grid-template-columns: repeat(3, auto); align-items: center; column-gap: 0; }
+  .cbar i { grid-column: 1 / 4; width: 132px; height: 6px; display: block; }
+  .cbar b { font: 400 10px/1 var(--mono); color: var(--text-3); margin-top: 4px; }
+  .cbar b:nth-of-type(2) { text-align: center; } .cbar b:nth-of-type(3) { text-align: right; }
+  .mk { display: inline-block; flex: none; }
+  .mk.ore { width: 14px; height: 5px; background: var(--gold-hi); }
   .mk.waste { width: 14px; height: 2px; background: var(--waste); }
   .mk.drill { width: 14px; height: 2px; background: var(--teal); }
   .mk.plan { width: 14px; border-top: 1px dashed var(--text-3); }
-  .mk.sample { width: 5px; height: 5px; background: var(--gold); }
-  .sub { border-top: 1px solid var(--rule); }
+  .mk.sample { width: 4px; height: 4px; background: var(--gold); }
+  .mk.iso { width: 14px; border-top: 1px solid rgba(239,195,108,.7); }
+  .block { border-top: 1px solid var(--rule); }
 
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { text-align: left; font-weight: 500; color: var(--text-3); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
-    padding: 6px 20px 6px 0; border-bottom: 1px solid var(--rule); }
-  th:first-child, td:first-child { padding-left: 20px; }
-  td { padding: 5px 20px 5px 0; border-bottom: 1px solid var(--rule-soft); font-family: var(--mono); font-variant-numeric: tabular-nums;
-    white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font: 500 10px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
+    padding: 10px 14px 8px 0; border-bottom: 1px solid var(--rule); }
+  th:first-child, td:first-child { padding-left: var(--pad); }
+  th:last-child, td:last-child { padding-right: var(--pad); }
+  td { padding: 7px 14px 7px 0; border-bottom: 1px solid var(--rule); font: 400 12px var(--mono);
+    font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text); }
+  tr:last-child td { border-bottom: 0; }
   td.r, th.r { text-align: right; }
+  td.dim { color: var(--text-3); }
   tr.cur td { color: var(--teal); }
-  .res-ore { color: var(--gold-hi); }
-  .res-waste { color: var(--text-3); }
-  .foot { padding: 10px 20px 16px; color: var(--text-3); font-size: 11px; border-top: 1px solid var(--rule); }
+  .res { display: inline-flex; align-items: center; gap: 7px; font-family: var(--sans); font-size: 12px; }
+  .res::before { content: ""; width: 6px; height: 6px; background: var(--waste); }
+  .res.ore { color: var(--gold-hi); } .res.ore::before { background: var(--gold-hi); }
+  .res.waste { color: var(--text-3); }
+  .res.drill { color: var(--teal); } .res.drill::before { background: var(--teal); }
+  .foot { padding: 12px var(--pad) 18px; color: var(--text-3); font-size: 11px; line-height: 1.55; border-top: 1px solid var(--rule); }
 
   @media (max-width: 1180px) {
     .work { grid-template-columns: 1fr; }
-    .pane + .pane { border-left: 0; border-top: 1px solid var(--rule); }
+    .side { border-left: 0; border-top: 1px solid var(--rule-2); }
     .panel { grid-template-columns: 1fr; }
-    .group { border-right: 0; border-bottom: 1px solid var(--rule); }
-    .group:last-child { border-bottom: 0; }
+    .group + .group { border-left: 0; border-top: 1px solid var(--rule); }
   }
   @media (max-width: 640px) {
-    .bar, .steps, .head, .viz, .legend, .foot, .group { padding-left: 16px; padding-right: 16px; }
-    th:first-child, td:first-child { padding-left: 16px; }
-    .meta { display: none; }
-    .cells { grid-template-columns: 1fr; row-gap: 8px; }
+    :root { --pad: 16px; }
+    .meta, .req { display: none; }
+    .cells { flex-direction: column; align-items: flex-start; gap: 12px; }
     .cell + .cell { border-left: 0; padding-left: 0; }
-    .req { display: none; }
   }
 </style>
 </head>
 <body>
-  <div class="bar">
+  <header class="bar">
     <div class="mark"><b>Adaptive Drill Planner</b><span>Ossara</span></div>
-    <div class="meta mono"><span><em>DEPOSIT</em>Hillside Cu-Au</span><span><em>RUN</em><span id="run">–</span></span>
-      <span><em>CUTOFF</em><span id="cutoff">–</span></span></div>
+    <div class="meta mono"><span><span class="key">Deposit</span>Hillside Cu-Au</span>
+      <span><span class="key">Run</span><span id="run">–</span></span>
+      <span><span class="key">Cutoff</span><span id="cutoff">–</span></span></div>
     <div class="grow"></div>
     <div class="link" id="link"><i></i><span class="mono">OPC UA offline</span></div>
-  </div>
+  </header>
 
   <nav class="steps" id="steps" aria-label="Decision cycle"></nav>
 
   <section class="panel" id="panel" aria-label="Programme indicators"></section>
 
   <main class="work">
-    <div class="pane">
+    <div class="main">
       <div class="head">
-        <h2>Section A–A′ through active hole</h2>
+        <h2>Section A–A′</h2>
         <div class="kv mono" id="holeKv"><span>Waiting for the first recommendation</span></div>
       </div>
       <div class="viz"><canvas id="section" aria-label="Live drill section"></canvas></div>
       <div class="legend">
-        <span><span class="bands" id="bands"></span><span>Model P(Cu &gt; cutoff)</span></span>
+        <span><span class="cbar" id="cbar"></span><span>P(Cu &gt; cutoff), model</span></span>
+        <span><span class="mk iso"></span>Isolines 0.1 step, labelled 0.5 / 0.8</span>
         <span><span class="mk ore"></span>Assayed ore</span>
         <span><span class="mk waste"></span>Assayed waste</span>
         <span><span class="mk sample"></span>Earlier assays within 40 m</span>
-        <span><span class="mk drill"></span>Drilled so far</span>
-        <span><span class="mk plan"></span>Planned trajectory</span>
+        <span><span class="mk drill"></span>Drilled</span>
+        <span><span class="mk plan"></span>Planned</span>
       </div>
     </div>
-    <div class="pane">
-      <div class="head"><h2>Plan</h2><div class="kv"><span>Highest P(ore) at any depth · collars · section line</span></div></div>
+    <aside class="side">
+      <div class="head"><h2>Plan</h2><span class="aside">Highest P(ore) at any depth</span></div>
       <div class="viz"><canvas id="plan" aria-label="Plan view"></canvas></div>
-      <div class="sub">
-        <div class="head"><h2>New ore found vs metres</h2><div class="kv" id="chartKv"></div></div>
+      <div class="block">
+        <div class="head"><h2>New ore found</h2><span class="aside mono" id="chartKv"></span></div>
         <div class="viz"><canvas id="chart" aria-label="Discovery curve"></canvas></div>
       </div>
-      <div class="sub">
-        <table><thead><tr><th>#</th><th>Hole</th><th class="r">Metres</th><th class="r">Ore m</th><th class="r">Mean Cu</th><th>Result</th></tr></thead>
+      <div class="block">
+        <div class="head"><h2>Holes</h2><span class="aside mono" id="holeCount"></span></div>
+        <table><thead><tr><th>#</th><th>Hole</th><th class="r">Metres</th><th class="r">Ore m</th><th class="r">Cu %</th><th>Result</th></tr></thead>
           <tbody id="holes"></tbody></table>
       </div>
       <div class="foot" id="assume"></div>
-    </div>
+    </aside>
   </main>
 
 <script>
@@ -192,16 +198,18 @@ const REPLAY = params.has("replay");
 const SPEED = parseFloat(params.get("speed") || "1");
 const STAGES = ["Recommend", "Limit check", "Operator approval", "Drilling", "Assays", "Model update"];
 const C = {
-  bg: "#0f141a", ground: "#121820", sky: "#0f141a", rule: "#252d38", grid: "rgba(214,219,225,0.055)",
-  text: "#d6dbe1", text2: "#9aa4b1", text3: "#6f7a88", teal: "#4fae9f", gold: "#d9a64a", goldHi: "#f0c46a",
-  waste: "#586371", alert: "#c9705f",
+  bg: "#0a0e13", side: "#0d1217", ground: "#131a22", sky: "#0f141a", rule: "#1f2731", frame: "#2a333f",
+  grid: "rgba(223,228,234,0.06)", text: "#dfe4ea", text2: "#a7b0bc", text3: "#7d8896",
+  teal: "#55b3a4", gold: "#d6a44c", goldHi: "#efc36c", waste: "#5e6977", alert: "#cf7564",
 };
-// P(ore) bands: restrained slate to mineral ochre. Only the upper bands carry colour.
-const BANDS = [
-  [0.00, [18, 24, 32]], [0.25, [26, 33, 41]], [0.35, [39, 42, 41]], [0.50, [70, 60, 38]],
-  [0.65, [112, 86, 41]], [0.80, [160, 119, 48]],
+// P(ore): a continuous, low-chroma ramp from the plot surface into mineral ochre. Background
+// odds (~0.15) sit on the surface colour; only genuine highs carry colour.
+const RAMP = [
+  [0.00, [19, 26, 34]], [0.17, [19, 26, 34]], [0.28, [31, 36, 40]], [0.40, [54, 51, 43]],
+  [0.52, [90, 74, 46]], [0.64, [130, 100, 52]], [0.78, [170, 129, 60]], [1.00, [210, 160, 76]],
 ];
-const CONTOURS = [{ p: 0.5, w: 1, a: 0.75 }, { p: 0.35, w: 0.8, a: 0.35, dash: [2, 3] }, { p: 0.8, w: 1, a: 0.9 }];
+const LEVELS = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+const MAJOR = new Set([0.5, 0.8]);
 const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace';
 const SANS = '"IBM Plex Sans", "Segoe UI", system-ui, sans-serif';
 
@@ -220,7 +228,14 @@ function fit(canvas) {
   ctx.setTransform(d, 0, 0, d, 0, 0);
   return { ctx, w: r.width, h: r.height };
 }
-function band(p) { let c = BANDS[0][1]; for (const [t, col] of BANDS) if (p >= t) c = col; return c; }
+function ramp(p) {
+  p = Math.max(0, Math.min(1, p));
+  for (let k = 1; k < RAMP.length; k++) if (p <= RAMP[k][0]) {
+    const [a, ca] = RAMP[k - 1], [b, cb] = RAMP[k], t = b > a ? (p - a) / (b - a) : 0;
+    return ca.map((c, j) => c + (cb[j] - c) * t);
+  }
+  return RAMP[RAMP.length - 1][1];
+}
 function bilinear(rows, y, x) {
   const h = rows.length, w = rows[0].length;
   const x0 = Math.min(w - 2, Math.max(0, Math.floor(x))), y0 = Math.min(h - 2, Math.max(0, Math.floor(y)));
@@ -228,12 +243,12 @@ function bilinear(rows, y, x) {
   const a = rows[y0][x0], b = rows[y0][x0 + 1], c = rows[y0 + 1][x0], d = rows[y0 + 1][x0 + 1];
   return a * (1 - fx) * (1 - fy) + b * fx * (1 - fy) + c * (1 - fx) * fy + d * fx * fy;
 }
-function bandImage(rows, up = 4) {          // smooth-interpolated, posterised into bands
+function fieldImage(rows, up = 2) {         // smooth, continuous fill
   const h = rows.length, w = rows[0].length, W = (w - 1) * up + 1, H = (h - 1) * up + 1;
   const c = document.createElement("canvas"); c.width = W; c.height = H;
   const ctx = c.getContext("2d"), img = ctx.createImageData(W, H);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const [r, g, b] = band(bilinear(rows, y / up, x / up)), o = 4 * (y * W + x);
+    const [r, g, b] = ramp(bilinear(rows, y / up, x / up)), o = 4 * (y * W + x);
     img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
@@ -267,23 +282,70 @@ function smooth(rows) {           // 3x3 box blur, edges clamped: rounds off gri
     r.push(t / n); } out.push(r); }
   return out;
 }
-function prepField(rows) {
-  const K = 3, fine = smooth(upsample(rows, K));
-  const iso = CONTOURS.map(c => ({ ...c, segs: isoSegments(fine, c.p).map(seg => seg.map(([x, y]) => [x / K, y / K])) }));
-  return { rows, img: bandImage(fine, 2), iso, scale: 1 };
+// Join marching-squares segments into polylines so isolines draw (and label) as continuous curves.
+function chains(segs) {
+  const key = ([x, y]) => `${Math.round(x * 1e4)},${Math.round(y * 1e4)}`;
+  const at = new Map();
+  segs.forEach((sg, i) => { for (const p of sg) { const k = key(p); if (!at.has(k)) at.set(k, []); at.get(k).push(i); } });
+  const used = new Uint8Array(segs.length), out = [];
+  const next = (pt) => (at.get(key(pt)) || []).find(i => !used[i]);
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    used[i] = 1;
+    const line = [segs[i][0], segs[i][1]];
+    for (const dir of [1, 0]) {                 // grow from the tail, then from the head
+      for (;;) {
+        const end = dir ? line[line.length - 1] : line[0], j = next(end);
+        if (j === undefined) break;
+        used[j] = 1;
+        const [a, b] = segs[j], other = key(a) === key(end) ? b : a;
+        if (dir) line.push(other); else line.unshift(other);
+      }
+    }
+    out.push(line);
+  }
+  return out;
 }
-function drawField(ctx, f, gx, gy, alpha = 1) {   // gx(col) / gy(row) -> screen
+function prepField(rows) {
+  const K = 3, fine = smooth(smooth(upsample(rows, K)));
+  const iso = LEVELS.map(p => ({ p, major: MAJOR.has(p),
+    lines: chains(isoSegments(fine, p)).map(l => l.map(([x, y]) => [x / K, y / K])).filter(l => l.length > 3) }));
+  return { rows, img: fieldImage(fine, 1), iso };
+}
+function drawField(ctx, f, gx, gy, alpha = 1, labels = false) {   // gx(col) / gy(row) -> screen
   const n = f.rows[0].length - 1, m = f.rows.length - 1;
   ctx.globalAlpha = alpha;
-  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
   ctx.drawImage(f.img, gx(0), gy(0), gx(n) - gx(0), gy(m) - gy(0));
+  ctx.lineJoin = "round"; ctx.lineCap = "round";
   for (const c of f.iso) {
-    ctx.strokeStyle = `rgba(240,196,106,${c.a * alpha})`; ctx.lineWidth = c.w; ctx.setLineDash(c.dash || []);
-    ctx.beginPath();
-    for (const [[x1, y1], [x2, y2]] of c.segs) { ctx.moveTo(gx(x1), gy(y1)); ctx.lineTo(gx(x2), gy(y2)); }
-    ctx.stroke();
+    ctx.strokeStyle = c.major ? `rgba(239,195,108,${0.72 * alpha})` : `rgba(214,182,120,${0.22 * alpha})`;
+    ctx.lineWidth = c.major ? 1.05 : 0.7;
+    for (const line of c.lines) {
+      const pts = line.map(([x, y]) => [gx(x), gy(y)]);
+      let gap = null;
+      if (labels && c.major) {                  // label the longest stretch, with a gap in the line
+        let len = 0; for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
+        if (len > 140) {
+          let acc = 0, k = 1;
+          for (; k < pts.length; k++) { acc += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); if (acc >= len * 0.5) break; }
+          gap = pts[Math.min(k, pts.length - 1)];
+        }
+      }
+      ctx.beginPath();
+      let pen = false;
+      for (const [x, y] of pts) {
+        if (gap && Math.hypot(x - gap[0], y - gap[1]) < 13) { pen = false; continue; }
+        if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+      }
+      ctx.stroke();
+      if (gap) {
+        ctx.font = `500 9.5px ${MONO}`; ctx.fillStyle = `rgba(239,195,108,${0.9 * alpha})`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(c.p.toFixed(1), gap[0], gap[1] + .5);
+      }
+    }
   }
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
+  ctx.globalAlpha = 1;
 }
 const fmt = (v, d = 0) => v == null || !isFinite(v) ? "–" : v.toLocaleString("en-AU", { maximumFractionDigits: d, minimumFractionDigits: d });
 const sgn = (v, d = 0) => v == null || !isFinite(v) ? "–" : (v < 0 ? "−" : "") + fmt(Math.abs(v), d);
@@ -356,7 +418,8 @@ function drawSection(v, dt) {
   const pad = { l: 46, r: 8, t: 22, b: 26 };
   const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
   const s = section;
-  ctx.strokeStyle = C.rule; ctx.lineWidth = 1; ctx.strokeRect(pad.l + .5, pad.t + .5, W - 1, H - 1);
+  ctx.fillStyle = C.ground; ctx.fillRect(pad.l, pad.t, W, H);
+  ctx.strokeStyle = C.frame; ctx.lineWidth = 1; ctx.strokeRect(pad.l + .5, pad.t + .5, W - 1, H - 1);
   if (!s || !s.z || !v.cur) return;
   const [s0, s1] = s.s, [zTop, zBot] = s.z;
   const g = holeGeom(v.cur), planned = Math.min(v.cur.depth, S.max_depth_m), cz = v.cur.z;
@@ -374,8 +437,9 @@ function drawSection(v, dt) {
   ctx.save(); ctx.beginPath(); ctx.rect(pad.l + 1, pad.t + 1, W - 2, H - 2); ctx.clip();
   ctx.fillStyle = C.ground; ctx.fillRect(pad.l, pad.t, W, H);
   fadeT = Math.min(1, fadeT + dt / 0.9);
-  if (prevSection && prevSection.field && fadeT < 1 && prevSection.hole_idx === s.hole_idx) drawField(ctx, prevSection.field, gx, gy, 1 - fadeT);
-  if (s.field) drawField(ctx, s.field, gx, gy, prevSection && prevSection.hole_idx === s.hole_idx ? fadeT : 1);
+  const same = prevSection && prevSection.hole_idx === s.hole_idx && fadeT < 1;
+  if (same && prevSection.field) drawField(ctx, prevSection.field, gx, gy, 1 - fadeT, true);
+  if (s.field) drawField(ctx, s.field, gx, gy, same ? fadeT : 1, true);
   // above ground
   const gyPx = Y(cz);
   ctx.fillStyle = C.sky; ctx.fillRect(pad.l, pad.t, W, Math.max(0, gyPx - pad.t));
@@ -451,19 +515,20 @@ function drawSection(v, dt) {
   }
   drawRig(ctx, X(0), gyPx, v.cur.dip, REPLAY ? replay.phase === "drill" : v.stage === 3);
   ctx.restore();
+  ctx.strokeStyle = C.frame; ctx.lineWidth = 1; ctx.strokeRect(pad.l + .5, pad.t + .5, W - 1, H - 1);
   // axes
   ctx.font = `400 10.5px ${MONO}`; ctx.fillStyle = C.text3; ctx.textAlign = "right"; ctx.textBaseline = "middle";
   for (let d = 0; cz - d >= vz1; d += zs) { const y = Y(cz - d); if (y > pad.t + 4) ctx.fillText(d ? `${d}` : "0", pad.l - 8, y); }
   ctx.textAlign = "center"; ctx.textBaseline = "top";
   for (let sv = Math.ceil(vs0 / ss) * ss; sv <= vs1; sv += ss) ctx.fillText(sv === 0 ? "0" : `${sv > 0 ? "+" : "−"}${Math.abs(sv)}`, X(sv), pad.t + H + 7);
   ctx.save(); ctx.translate(12, pad.t + H / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.textBaseline = "middle";
-  ctx.font = `400 10.5px ${SANS}`; ctx.fillText("DEPTH BELOW COLLAR (m)", 0, 0); ctx.restore();
+  ctx.font = `500 9.5px ${SANS}`; ctx.fillText("DEPTH BELOW COLLAR  (m)", 0, 0); ctx.restore();
   const az = sectionAz(v.cur);
   ctx.font = `500 11px ${MONO}`; ctx.fillStyle = C.text2; ctx.textBaseline = "bottom";
   ctx.textAlign = "left"; ctx.fillText(`A   ${compass(az + 180)}`, pad.l, pad.t - 6);
   ctx.textAlign = "right"; ctx.fillText(`${compass(az)}   A′`, pad.l + W, pad.t - 6);
-  ctx.textAlign = "center"; ctx.fillStyle = C.text3; ctx.font = `400 10.5px ${MONO}`;
-  ctx.fillText("ALONG SECTION FROM COLLAR (m)", pad.l + W / 2, pad.t - 6);
+  ctx.textAlign = "center"; ctx.fillStyle = C.text3; ctx.font = `500 9.5px ${SANS}`;
+  ctx.fillText("DISTANCE ALONG SECTION FROM COLLAR  (m)", pad.l + W / 2, pad.t - 6);
 }
 function label(ctx, x, y, text, color) {
   ctx.font = `500 11px ${MONO}`; const tw = ctx.measureText(text).width;
@@ -535,7 +600,7 @@ function drawPlan(v) {
     ctx.moveTo(cx, cy - 10); ctx.lineTo(cx, cy - 7); ctx.moveTo(cx, cy + 7); ctx.lineTo(cx, cy + 10); ctx.stroke();
   }
   ctx.restore();
-  ctx.strokeStyle = C.rule; ctx.strokeRect(Math.round(fx0) + .5, Math.round(fy0) + .5, Math.round(fw) - 1, Math.round(fh) - 1);
+  ctx.strokeStyle = C.frame; ctx.strokeRect(Math.round(fx0) + .5, Math.round(fy0) + .5, Math.round(fw) - 1, Math.round(fh) - 1);
   // axes: local coordinates
   ctx.font = `400 10px ${MONO}`; ctx.fillStyle = C.text3;
   ctx.textAlign = "center"; ctx.textBaseline = "top";
@@ -555,7 +620,7 @@ function drawPlan(v) {
 function drawChart(v) {
   const { ctx, w, h } = fit($("chart"));
   ctx.clearRect(0, 0, w, h);
-  const pad = { l: 34, r: 74, t: 8, b: 20 };
+  const pad = { l: 34, r: 84, t: 12, b: 34 };
   const W = w - pad.l - pad.r, H = h - pad.t - pad.b;
   const mine = v.recs.map(r => [r.kpis.metres || 0, r.kpis.new_ore_mt || 0]);
   const last = mine.length ? mine[mine.length - 1] : [0, 0];
@@ -575,6 +640,9 @@ function drawChart(v) {
     ctx.beginPath(); ctx.moveTo(X(0), Y(0)); for (const [x, y] of pts) ctx.lineTo(X(x), Y(y)); ctx.stroke(); ctx.setLineDash([]); };
   if (base.length) line(base, C.text3, [3, 3]);
   if (mine.length) line(mine, C.teal);
+  ctx.font = `500 9.5px ${SANS}`; ctx.fillStyle = C.text3; ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillText("Mt", 2, pad.t - 2);
+  ctx.textAlign = "right"; ctx.textBaseline = "top"; ctx.fillText("METRES DRILLED", pad.l + W, pad.t + H + 19);
   ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = `500 10.5px ${SANS}`;
   if (base.length) { const p = base[base.length - 1]; ctx.fillStyle = C.text3; ctx.fillText("Rule of thumb", X(p[0]) + 6, Y(p[1])); }
   if (mine.length) { ctx.fillStyle = C.teal; ctx.beginPath(); ctx.arc(X(last[0]), Y(last[1]), 2.5, 0, 7); ctx.fill();
@@ -593,37 +661,38 @@ function kpisNow(v) {
   }
   return last || { holes: 0, metres: 0, ore_m: 0, new_ore_mt: 0, new_cu_kt: 0, drill_cost_aud_m: 0 };
 }
-function cell(l, v, u, s, cls = "") {
+function cell(l, v, u, s, cls = "") {   // cls: primary | ore | pos
   return `<div class="cell ${cls}"><div class="l">${l}</div><div class="v">${v}${u ? `<small>${u}</small>` : ""}</div><div class="s">${s}</div></div>`;
 }
 function drawPanel(k) {
   const saved = k.cost_saved_aud_m, ms = k.metres_saved;
-  const savedCls = saved == null ? "" : saved >= 0 ? "pos" : "neg";
+  const savedCls = "primary" + (saved != null && saved >= 0 ? " pos" : "");
   const html =
     `<div class="group"><div class="eyebrow">Programme</div><div class="cells">` +
-      cell("Holes drilled", fmt(k.holes), "", `${fmt(k.metres)} m core`) +
-      cell("Drilling spend", `${fmt(k.drill_cost_aud_m, 2)}`, "A$M", `${fmt(S.drill_cost_aud_per_m, 2)} A$/m all-in`) +
+      cell("Holes", fmt(k.holes), "", "drilled") +
+      cell("Metres", fmt(k.metres), "m", "core") +
+      cell("Spend", fmt(k.drill_cost_aud_m, 2), "A$M", `${fmt(S.drill_cost_aud_per_m, 2)} A$/m`) +
     `</div></div>` +
     `<div class="group"><div class="eyebrow">Discovery</div><div class="cells">` +
-      cell("Ore intercepted", fmt(k.ore_m), "m", `${k.metres ? fmt(100 * k.ore_m / k.metres, 0) : "–"}% of metres in ore`) +
-      cell("New ore found", fmt(k.new_ore_mt, 1), "Mt", `${fmt(k.new_cu_kt, 1)} kt contained Cu`, "ore") +
+      cell("New ore found", fmt(k.new_ore_mt, 1), "Mt", `${fmt(k.new_cu_kt, 1)} kt contained Cu`, "primary ore") +
+      cell("Ore intercepted", fmt(k.ore_m), "m", `${k.metres ? fmt(100 * k.ore_m / k.metres, 0) : "–"}% of metres`) +
     `</div></div>` +
     `<div class="group"><div class="eyebrow">Against rule of thumb</div><div class="cells">` +
-      cell("Rule of thumb needs", fmt(k.baseline_metres), "m", "for the same new ore") +
       cell("Saved", saved == null ? "–" : sgn(saved, 2), saved == null ? "" : "A$M",
-        ms == null ? "baseline has no match" : ms >= 0 ? `${fmt(ms)} m fewer` : `${fmt(-ms)} m behind so far`, savedCls) +
+        ms == null ? "no matching baseline" : ms >= 0 ? `${fmt(ms)} m fewer` : `${fmt(-ms)} m behind so far`, savedCls) +
+      cell("Rule of thumb needs", fmt(k.baseline_metres), "m", "for the same new ore") +
     `</div></div>`;
   setHTML("panel", html);
-  setHTML("chartKv", `<span class="mono">${fmt(k.new_ore_mt, 1)} Mt vs ${k.baseline_metres == null ? "–" : fmt(k.baseline_metres) + " m"} for the rule of thumb</span>`);
+  setHTML("chartKv", `${fmt(k.new_ore_mt, 1)} Mt at ${fmt(k.metres)} m`);
 }
 function drawSteps(v) {
   const html = STAGES.map((name, i) => {
     let cls = "";
     if (v.stage >= 0) cls = i < v.stage ? "done" : i === v.stage ? (v.bad ? "bad" : "active") : "";
     return `<div class="step ${cls}"><span class="n">${String(i + 1).padStart(2, "0")}</span>${name}</div>`;
-  }).join("") +
-    `<div class="req mono"><span><em>REQ</em>${v.req ? String(v.req).padStart(4, "0") : "–"}</span>` +
-    `<span><em>HOLE</em>${v.cur ? v.cur.hole_id : "–"}</span></div>`;
+  }).join('<span class="sep"></span>') +
+    `<div class="req mono"><span><span class="key">Request</span>${v.req ? String(v.req).padStart(4, "0") : "–"}</span>` +
+    `<span><span class="key">Hole</span>${v.cur ? v.cur.hole_id : "–"}</span></div>`;
   setHTML("steps", html);
   const l = $("link");
   l.className = "link" + (state && state.opc ? " on" : "");
@@ -634,21 +703,22 @@ function drawHoleKv(v) {
   const c = v.cur, planned = Math.min(c.depth, S.max_depth_m);
   setHTML("holeKv",
     `<span class="hole">${c.hole_id}</span>` +
-    `<span><em>Collar</em>${fmt(c.x)}E ${fmt(c.y)}N ${fmt(c.z, 0)} RL</span>` +
-    `<span><em>Az</em>${fmt(c.azimuth, 1)}°</span><span><em>Dip</em>${sgn(c.dip, 1)}°</span>` +
-    `<span><em>Planned</em>${fmt(planned)} m</span><span><em>Depth</em>${fmt(depthShown, 1)} m</span>`);
+    `<span><span class="key">Collar</span>${fmt(c.x)} E  ${fmt(c.y)} N  ${fmt(c.z, 0)} RL</span>` +
+    `<span><span class="key">Az</span>${fmt(c.azimuth, 1)}°</span><span><span class="key">Dip</span>${sgn(c.dip, 1)}°</span>` +
+    `<span><span class="key">Planned</span>${fmt(planned)} m</span><span><span class="key">Depth</span>${fmt(depthShown, 1)} m</span>`);
 }
 function drawTable(v) {
   const cut = S.cutoff_pct;
   const rows = v.recs.slice(-6).reverse().map(r => {
     const ore = r.ore_m > 0;
-    return `<tr><td>${String(r.iteration).padStart(2, "0")}</td><td>${r.hole_id}</td><td class="r">${fmt(r.metres)}</td>` +
-      `<td class="r">${fmt(r.ore_m)}</td><td class="r">${r.mean_cu == null ? "–" : fmt(r.mean_cu, 2)}</td>` +
-      `<td class="${ore ? "res-ore" : "res-waste"}">${ore ? "Ore" : "Waste"}</td></tr>`;
+    return `<tr><td class="dim">${String(r.iteration).padStart(2, "0")}</td><td>${r.hole_id}</td><td class="r">${fmt(r.metres)}</td>` +
+      `<td class="r${ore ? "" : " dim"}">${fmt(r.ore_m)}</td><td class="r${ore ? "" : " dim"}">${r.mean_cu == null ? "–" : fmt(r.mean_cu, 2)}</td>` +
+      `<td><span class="res ${ore ? "ore" : "waste"}">${ore ? "Ore" : "Waste"}</span></td></tr>`;
   });
   if (v.cur && !v.recs.some(r => r.hole_idx === v.cur.hole_idx))
-    rows.unshift(`<tr class="cur"><td>··</td><td>${v.cur.hole_id}</td><td class="r">${fmt(depthShown)}</td><td class="r">–</td><td class="r">–</td><td>Drilling</td></tr>`);
-  setHTML("holes", rows.join("") || `<tr><td colspan="6" style="color:${C.text3}">No holes yet</td></tr>`);
+    rows.unshift(`<tr class="cur"><td>··</td><td>${v.cur.hole_id}</td><td class="r">${fmt(depthShown)}</td><td class="r">–</td><td class="r">–</td><td><span class="res drill">Drilling</span></td></tr>`);
+  setHTML("holes", rows.join("") || `<tr><td colspan="6" class="dim">No holes yet</td></tr>`);
+  setHTML("holeCount", `${v.recs.length} drilled · latest ${Math.min(6, v.recs.length)}`);
 }
 
 // ---------- replay clock ----------
@@ -686,8 +756,8 @@ function frame(now) {
     try { S = await getJSON("/api/static"); } catch (e) { await new Promise(r => setTimeout(r, 1000)); }
   }
   $("cutoff").textContent = `${S.cutoff_pct}% Cu`;
-  $("bands").innerHTML = BANDS.slice(1).map(([t, c]) => `<i style="background:rgb(${c.join(",")})"></i>`).join("") +
-    `<b>${BANDS[1][0]}</b><b>→</b><b>${BANDS[BANDS.length - 1][0]}+</b>`;
+  const stops = RAMP.map(([t, c]) => `rgb(${c.map(Math.round).join(",")}) ${t * 100}%`).join(", ");
+  $("cbar").innerHTML = `<i style="background:linear-gradient(90deg, ${stops})"></i><b>0</b><b>0.5</b><b>1</b>`;
   $("assume").textContent = `Indicative. New ore: 25 × 25 × 10 m blocks first reached by an assayed ore sample, ${S.density_t_m3} t/m³ assumed. ` +
     `Drilling at A$${S.drill_cost_aud_per_m}/m all-in (IBISWorld 2025–26). Rule of thumb: drill the hole with the most trace near known ore.`;
   poll();
