@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import socket
 import subprocess
 import sys
+import webbrowser
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Annotated
@@ -23,9 +25,10 @@ from geoopt.baseline import near_ore_curve
 from geoopt.config import DEFAULT_CONFIG_PATH, Config, load_config
 from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
+from geoopt.data.prepare import prepared_paths
 from geoopt.logging_setup import configure_logging
 from geoopt.progress import Progress
-from geoopt.run import new_run_dir, run_inprocess, summarize
+from geoopt.run import run_inprocess, summarize
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -147,31 +150,69 @@ def _serve(
     )
 
 
+def _check_port(port: int) -> None:
+    with socket.socket() as s:
+        if s.connect_ex(("127.0.0.1", port)) == 0:
+            typer.echo(f"error: port {port} is already in use; pick another with --port", err=True)
+            raise typer.Exit(1)
+
+
+def _ensure_demo_inputs(cfg: Config) -> None:
+    """Prepare the data and build the rule-of-thumb baseline if this machine has neither yet."""
+    if not prepared_paths(cfg.data.processed_dir).meta.exists():
+        typer.echo("first run: preparing the drillhole data ...")
+        try:
+            prepare_data(cfg)
+        except (DataConfigIncomplete, FileNotFoundError) as exc:
+            typer.echo(
+                f"error: {exc}\nThe raw drillhole data isn't on this machine: copy "
+                "data/raw/hillside/ from one that has it, or rebuild it (scripts/fetch_data.md).",
+                err=True,
+            )
+            raise typer.Exit(1) from exc
+    baseline_file = cfg.kpi.baseline_file
+    if baseline_file is not None and not baseline_file.exists():
+        typer.echo("first run: building the rule-of-thumb baseline ...")
+        near_ore_curve(cfg, baseline_file)
+
+
 @app.command()
 def demo(
     config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
-    max_holes: Annotated[int | None, typer.Option(help="Override loop.max_holes.")] = None,
+    holes: Annotated[
+        int | None, typer.Option(help="Holes to drill (default loop.max_holes).")
+    ] = None,
     speed: Annotated[
-        float | None, typer.Option(help="Drilling speed in m/s (overrides rig.metres_per_second).")
+        float | None, typer.Option(help="Drilling speed, m/s (default rig.metres_per_second).")
     ] = None,
     port: Annotated[int, typer.Option(help="HTTP port.")] = 8600,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Open the page.")] = True,
 ) -> None:
-    """Run the planner at demo pace and show it live in the browser. One command, one process."""
+    """Run the planner at demo pace and watch it live in the browser."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
-    if max_holes is not None:
-        cfg = cfg.model_copy(update={"loop": cfg.loop.model_copy(update={"max_holes": max_holes})})
+    if holes is not None:
+        cfg = cfg.model_copy(update={"loop": cfg.loop.model_copy(update={"max_holes": holes})})
     if speed is not None:
         rig = cfg.rig.model_copy(update={"metres_per_second": speed})
         cfg = cfg.model_copy(update={"rig": rig})
+    _check_port(port)
+    _ensure_demo_inputs(cfg)
     progress = Progress()
-    run_dir = new_run_dir(cfg, "adaptive")
+    url = f"http://localhost:{port}"
 
     async def job() -> None:
-        records = await run_inprocess(cfg, "adaptive", run_dir, progress=progress)
-        typer.echo(summarize(records))
+        if open_browser:
+            await asyncio.sleep(1.0)  # let the server start listening first
+            webbrowser.open(url)
+        records = await run_inprocess(cfg, "adaptive", progress=progress)
+        s = summarize(records)
+        typer.echo(
+            f"demo done: {s['holes_drilled']} holes, {s['metres']:,.0f} m. "
+            "The page stays up; Ctrl+C to stop."
+        )
 
-    typer.echo(f"live view on http://localhost:{port}  (Ctrl+C to stop)")
+    typer.echo(f"live view on {url}  (Ctrl+C to stop)")
     with contextlib.suppress(KeyboardInterrupt):
         _serve(cfg, port, job, progress)
 
@@ -184,6 +225,7 @@ def live(
     """Live view of finished runs only: open /?replay to replay the latest one."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
+    _check_port(port)
     typer.echo(f"live view on http://localhost:{port}/?replay")
     with contextlib.suppress(KeyboardInterrupt):
         _serve(cfg, port)

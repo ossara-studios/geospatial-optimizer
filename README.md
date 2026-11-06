@@ -3,6 +3,27 @@
 Recommends the next copper exploration drillhole, checks it against site limits, "drills" it
 against held-out historical assays, updates the ore model and repeats.
 
+## Quick start: the live demo
+After [Setup](#setup), one command:
+```bash
+.venv/bin/geoopt demo          # Windows: .venv\Scripts\geoopt demo
+```
+It opens http://localhost:8600 and drills 20 holes at demo pace (about 5 s a hole), showing each
+recommendation, the drilling, the assays coming back and the model updating. The first run also
+prepares the data and builds the rule-of-thumb baseline (under a minute).
+
+| Option | Does |
+|---|---|
+| `--holes 40` | drill more holes (savings grow with metres drilled) |
+| `--speed 120` | drill faster, in metres per second (default 60) |
+| `--port 8700` | use another port |
+| `--no-open` | don't open the browser |
+
+`geoopt live` serves finished runs only: `http://localhost:8600/?replay` replays the latest
+(`&speed=2` for faster, `&run=<folder>` for another run). The figures on the page are
+INDICATIVE: new ore uses an assumed 2.8 t/m³ and drilling an assumed A$373.70/m
+(`config/default.yaml` → `kpi`).
+
 ## Data
 Hillside Cu-Au deposit (Rex Minerals), from the Geological Survey of South Australia's SARIG data
 package. Attribution: Department for Energy and Mining, Government of South Australia,
@@ -40,18 +61,6 @@ The model logs `device=cuda` on each fit. Raw data is git-ignored: copy `data/ra
 ```
 `--workers` runs independent runs in parallel processes. Results match a serial run exactly.
 On one 8 GB GPU, 2–3 workers is a sensible start.
-
-## Live demo (animated)
-One command, one process: the planner runs at demo pace and the page follows it.
-```bash
-.venv/bin/geoopt baseline       # once: near-ore rule of thumb, for "cost saved"
-.venv/bin/geoopt demo           # http://localhost:8600
-```
-`--max-holes 40` runs longer; `--speed 120` drills faster (metres per second, default
-`rig.metres_per_second`). `geoopt live` serves finished runs only:
-`http://localhost:8600/?replay` replays the latest (`&speed=2` for faster; `&run=<folder>` for
-another run). The KPIs are INDICATIVE: new ore uses an assumed 2.8 t/m³ and drilling an
-assumed A$373.70/m (see `config/default.yaml` → `kpi`).
 
 ## Visualizer
 ```bash

@@ -85,10 +85,6 @@ class DiscoveryTracker:
         self._ore_m = 0.0
         self._known = self._reach(self._ore(seed_composites))
 
-    @property
-    def block_count(self) -> int:
-        return len(self._centres)
-
     def _ore(self, comps: pd.DataFrame) -> pd.DataFrame:
         return comps[comps["cu"] > self._cutoff] if len(comps) else comps
 
