@@ -27,7 +27,7 @@ def run_view(run_dir: Path) -> None:
 
     st.caption(
         f"strategy **{cfg.get('strategy')}** · seed holes {len(tables['seed_collars'])} · "
-        f"candidates {len(tables['candidates'])} · cutoff Cu > {cutoff}% (placeholder)"
+        f"candidates {len(tables['candidates'])} · cutoff Cu > {cutoff}%"
     )
     if recs.empty:
         st.info("No iterations written yet.")
