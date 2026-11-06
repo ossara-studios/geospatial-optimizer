@@ -3,7 +3,6 @@ log_level: INFO
 
 # Paths are relative to this file's directory.
 limits_file: limits.yaml
-nodes_file: opcua_nodes.yaml
 env_file: env_factors.yaml
 
 data:
@@ -32,11 +31,9 @@ loop:
   max_holes: 20
   max_metres: null      # stop early once this many metres are drilled
   eval_grid: [40, 64, 16]  # x, y, z cells over the candidate extent (viz only)
-  live_lab_dir: ../runs/live_lab   # OPC UA mode: rig-sim writes, planner reads
 
 rig:
   metres_per_second: 60.0   # DEMO speed so a hole "drills" in seconds
-  telemetry_period_s: 0.5
 
 composite:
   length_m: 10.0
@@ -114,16 +111,3 @@ kpi:   # live discovery KPIs shown on the HMI and the visualizer (INDICATIVE)
   baseline_budget_m: 60000.0   # baseline runs past the planner so metres saved stay defined
   baseline_file: ../runs/baseline/near_ore.parquet   # built by `geoopt baseline`
 
-opcua:
-  # Emulator default. For real EAE, change only this URL (and node ids in opcua_nodes.yaml).
-  endpoint: opc.tcp://127.0.0.1:4840/geoopt/
-  # Local dev uses no security. Production would use signed/encrypted OPC UA across the IT/OT firewall.
-  security: none
-  poll_interval_s: 0.2
-  log_wait_every_s: 10.0
-  timeouts:
-    connect_s: 10.0
-    check_s: 15.0
-    # null = wait for the operator indefinitely (logging while waiting).
-    approval_s: null
-    drill_s: null

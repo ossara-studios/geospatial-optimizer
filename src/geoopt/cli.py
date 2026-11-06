@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import subprocess
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -19,12 +20,12 @@ from geoopt.backtest import (
     run_delineation_sweep,
 )
 from geoopt.baseline import near_ore_curve
-from geoopt.config import DEFAULT_CONFIG_PATH, load_config
+from geoopt.config import DEFAULT_CONFIG_PATH, Config, load_config
 from geoopt.data.load import DataConfigIncomplete
 from geoopt.data.prepare import prepare as prepare_data
-from geoopt.emulator.server import auto_approve, cli_approve, serve
 from geoopt.logging_setup import configure_logging
-from geoopt.run import run_inprocess, run_opcua, run_rig_sim, summarize
+from geoopt.progress import Progress
+from geoopt.run import new_run_dir, run_inprocess, summarize
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -55,20 +56,14 @@ def run_loop(
     strategy: Annotated[
         str, typer.Option(help="adaptive | random | grid | historical")
     ] = "adaptive",
-    bridge: Annotated[str, typer.Option(help="inprocess | opcua")] = "inprocess",
     max_holes: Annotated[int | None, typer.Option(help="Override loop.max_holes.")] = None,
 ) -> None:
-    """Run the decision loop end to end."""
+    """Run the decision loop end to end, as fast as it goes (no live view)."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
     if max_holes is not None:
         cfg = cfg.model_copy(update={"loop": cfg.loop.model_copy(update={"max_holes": max_holes})})
-    if bridge == "inprocess":
-        records = asyncio.run(run_inprocess(cfg, strategy))
-    elif bridge == "opcua":
-        records = asyncio.run(run_opcua(cfg, strategy))
-    else:
-        raise typer.BadParameter(f"unknown bridge {bridge!r}")
+    records = asyncio.run(run_inprocess(cfg, strategy))
     typer.echo(summarize(records))
 
 
@@ -137,47 +132,61 @@ def baseline(
     )
 
 
+def _serve(
+    cfg: Config,
+    port: int,
+    job: Callable[[], Awaitable[None]] | None = None,
+    progress: Progress | None = None,
+) -> None:
+    import uvicorn
+
+    from geoopt.live.server import build_app
+
+    uvicorn.run(
+        build_app(cfg, progress=progress, job=job), host="127.0.0.1", port=port, log_level="warning"
+    )
+
+
+@app.command()
+def demo(
+    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
+    max_holes: Annotated[int | None, typer.Option(help="Override loop.max_holes.")] = None,
+    speed: Annotated[
+        float | None, typer.Option(help="Drilling speed in m/s (overrides rig.metres_per_second).")
+    ] = None,
+    port: Annotated[int, typer.Option(help="HTTP port.")] = 8600,
+) -> None:
+    """Run the planner at demo pace and show it live in the browser. One command, one process."""
+    cfg = load_config(config)
+    configure_logging(cfg.log_level)
+    if max_holes is not None:
+        cfg = cfg.model_copy(update={"loop": cfg.loop.model_copy(update={"max_holes": max_holes})})
+    if speed is not None:
+        rig = cfg.rig.model_copy(update={"metres_per_second": speed})
+        cfg = cfg.model_copy(update={"rig": rig})
+    progress = Progress()
+    run_dir = new_run_dir(cfg, "adaptive")
+
+    async def job() -> None:
+        records = await run_inprocess(cfg, "adaptive", run_dir, progress=progress)
+        typer.echo(summarize(records))
+
+    typer.echo(f"live view on http://localhost:{port}  (Ctrl+C to stop)")
+    with contextlib.suppress(KeyboardInterrupt):
+        _serve(cfg, port, job, progress)
+
+
 @app.command()
 def live(
     config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
     port: Annotated[int, typer.Option(help="HTTP port.")] = 8600,
 ) -> None:
-    """Live drilling view (animated). Reads OPC UA and the run folder; add ?replay to replay."""
-    import uvicorn
-
-    from geoopt.live.server import build_app
-
+    """Live view of finished runs only: open /?replay to replay the latest one."""
     cfg = load_config(config)
     configure_logging(cfg.log_level)
-    typer.echo(f"live view on http://localhost:{port}  (replay a finished run: /?replay)")
-    uvicorn.run(build_app(cfg), host="127.0.0.1", port=port, log_level="warning")
-
-
-@app.command("rig-sim")
-def rig_sim(
-    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
-) -> None:
-    """Run the rig + lab simulator as an OPC UA client of EAE (or the emulator)."""
-    cfg = load_config(config)
-    configure_logging(cfg.log_level)
+    typer.echo(f"live view on http://localhost:{port}/?replay")
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(run_rig_sim(cfg))
-
-
-@app.command()
-def emulator(
-    config: Annotated[Path, typer.Option(help="Main config file.")] = DEFAULT_CONFIG_PATH,
-    auto_approve_all: Annotated[
-        bool,
-        typer.Option("--auto-approve", help="Approve every checked request without prompting."),
-    ] = False,
-) -> None:
-    """Run the EAE emulator (OPC UA server with the EAE node map and limit logic)."""
-    cfg = load_config(config)
-    configure_logging(cfg.log_level)
-    approver = auto_approve if auto_approve_all else cli_approve
-    with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(serve(cfg, approver))
+        _serve(cfg, port)
 
 
 @app.command()

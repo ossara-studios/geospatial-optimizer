@@ -3,31 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Self
+from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 DEFAULT_CONFIG_PATH = Path("config/default.yaml")
 
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class Timeouts(_Strict):
-    connect_s: float = Field(10.0, gt=0)
-    check_s: float = Field(15.0, gt=0)
-    approval_s: float | None = Field(None, gt=0)
-    drill_s: float | None = Field(None, gt=0)  # wait for Done.ReqId; null = indefinitely
-
-
-class OpcUaConfig(_Strict):
-    endpoint: str
-    security: Literal["none"] = "none"
-    poll_interval_s: float = Field(0.2, gt=0)
-    log_wait_every_s: float = Field(10.0, gt=0)
-    timeouts: Timeouts = Timeouts()
 
 
 class Bounds(_Strict):
@@ -55,30 +40,13 @@ class CircleZone(_Strict):
 
 
 class Limits(_Strict):
-    """Mirrored by the EAE limit-check FB. Coordinates are local metres (see meta.json)."""
+    """Drilling limits. Coordinates are local metres (see meta.json)."""
 
     max_depth_m: float = Field(gt=0)
     site_bounds: Bounds | None = None
     no_go_zones: list[RectZone | CircleZone] = []
     dip_range: tuple[float, float] = (-90.0, 0.0)  # degrees, negative = down
     azimuth_range: tuple[float, float] = (0.0, 360.0)
-
-
-class NodeSpec(_Strict):
-    id: str | None = None
-    node_id: str | None = None
-    type: Literal["UInt32", "Int16", "Double"]
-
-    @model_validator(mode="after")
-    def _exactly_one_identifier(self) -> Self:
-        if (self.id is None) == (self.node_id is None):
-            raise ValueError("node needs exactly one of `id` or `node_id`")
-        return self
-
-
-class NodeMap(_Strict):
-    namespace_uri: str
-    nodes: dict[str, NodeSpec]
 
 
 class TableSource(_Strict):
@@ -156,7 +124,6 @@ class PlannerConfig(_Strict):
 
 class RigConfig(_Strict):
     metres_per_second: float = Field(gt=0)  # demo drilling speed, not a real rate
-    telemetry_period_s: float = Field(gt=0)
 
 
 class LoopConfig(_Strict):
@@ -167,8 +134,6 @@ class LoopConfig(_Strict):
     eval_grid: tuple[int, int, int] = (30, 30, 12)
     # Assays reach the model only after this many more holes are drilled (lab turnaround).
     assay_lag_holes: int = Field(0, ge=0)
-    # Lab drop folder shared by the rig simulator and the planner in OPC UA mode.
-    live_lab_dir: Path
 
 
 class AdaptiveVariant(_Strict):
@@ -259,9 +224,7 @@ class Config(_Strict):
     backtest: BacktestConfig
     env: EnvFactors
     kpi: KpiConfig = KpiConfig()
-    opcua: OpcUaConfig
     limits: Limits
-    nodes: NodeMap
 
 
 def _read_yaml(path: Path) -> dict:
@@ -270,17 +233,15 @@ def _read_yaml(path: Path) -> dict:
 
 
 def load_config(path: Path = DEFAULT_CONFIG_PATH) -> Config:
-    """Load the main config and the limits/node-map files it references."""
+    """Load the main config and the limits/env files it references."""
     raw = _read_yaml(path)
     base = path.parent
     raw["limits"] = _read_yaml(base / raw.pop("limits_file"))
-    raw["nodes"] = _read_yaml(base / raw.pop("nodes_file"))
     raw["env"] = _read_yaml(base / raw.pop("env_file"))
     raw["backtest"]["out_dir"] = (base / raw["backtest"]["out_dir"]).resolve()
     for key in ("raw_dir", "processed_dir"):
         raw["data"][key] = (base / raw["data"][key]).resolve()
-    for key in ("runs_dir", "live_lab_dir"):
-        raw["loop"][key] = (base / raw["loop"][key]).resolve()
+    raw["loop"]["runs_dir"] = (base / raw["loop"]["runs_dir"]).resolve()
     if raw.get("kpi", {}).get("baseline_file"):
         raw["kpi"]["baseline_file"] = (base / raw["kpi"]["baseline_file"]).resolve()
     if raw["model"].get("fit_cache_dir"):

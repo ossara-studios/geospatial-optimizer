@@ -1,3 +1,3 @@
-"""Geospatial Optimizer: adaptive exploration drillhole planning with an EAE OPC UA loop."""
+"""Geospatial Optimizer: adaptive exploration drillhole planning."""
 
 __version__ = "0.1.0"

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import socket
 from pathlib import Path
 
 import numpy as np
@@ -17,22 +16,6 @@ def cfg() -> Config:
     c = load_config(REPO_ROOT / "config" / "default.yaml")
     # Tests never read or write the repo's frozen-fit cache.
     return c.model_copy(update={"model": c.model.model_copy(update={"fit_cache_dir": None})})
-
-
-@pytest.fixture
-def local_cfg(cfg: Config) -> Config:
-    """Config pointing at a free localhost port, with short timeouts for tests."""
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        port = s.getsockname()[1]
-    opcua = cfg.opcua.model_copy(
-        update={
-            "endpoint": f"opc.tcp://127.0.0.1:{port}/geoopt/",
-            "poll_interval_s": 0.05,
-            "timeouts": cfg.opcua.timeouts.model_copy(update={"check_s": 3.0, "approval_s": 3.0}),
-        }
-    )
-    return cfg.model_copy(update={"opcua": opcua})
 
 
 N_HOLES = 30

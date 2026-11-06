@@ -1,4 +1,4 @@
-"""The interface the decision loop uses to talk to the OT side (EAE or a stand-in)."""
+"""The interface the decision loop uses for the field side: limit check, approval, rig, lab."""
 
 from __future__ import annotations
 
@@ -9,21 +9,17 @@ from geoopt.protocol import CheckResult, Completion, Decision, RecommendationMsg
 
 class Bridge(Protocol):
     async def next_req_id(self) -> int:
-        """First ReqId this session may use (above anything already on the OT side)."""
+        """First request id this session may use."""
         ...
 
     async def submit(self, rec: RecommendationMsg) -> CheckResult:
-        """Send a recommendation and wait for EAE's limit check."""
+        """Send a recommendation and get the limit check back."""
         ...
 
     async def await_approval(self, req_id: int) -> Decision:
-        """Wait for the operator's decision on a checked request."""
+        """Wait for the decision on a checked request."""
         ...
 
     async def await_completion(self, req_id: int) -> Completion:
-        """Wait until the rig reports the dispatched hole complete (lab results released)."""
-        ...
-
-    async def publish_kpis(self, kpis: dict[str, float]) -> None:
-        """Show the discovery KPIs on the OT side (HMI). Display only."""
+        """Wait until the hole is drilled (its lab results are then released)."""
         ...

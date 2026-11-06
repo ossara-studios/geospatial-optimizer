@@ -1,4 +1,4 @@
-"""The bridge-agnostic decision loop (state machine in docs/eae_contract.md).
+"""The bridge-agnostic decision loop.
 
 recommend -> check -> approve -> dispatch -> complete -> ingest lab results -> condition.
 With `assay_lag_holes` = k, a hole's results condition the model only after k more holes.
@@ -7,6 +7,7 @@ The loop only sees grades through the lab drop folder; it never touches held-out
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -14,6 +15,7 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -23,6 +25,7 @@ from geoopt.config import LoopConfig
 from geoopt.kpi import DiscoveryTracker
 from geoopt.model.gp import OreModel
 from geoopt.planner.strategies import PlannerState, Strategy
+from geoopt.progress import Progress
 from geoopt.protocol import CheckStatus, Decision, RecommendationMsg
 
 log = logging.getLogger(__name__)
@@ -72,6 +75,7 @@ class DecisionLoop:
         write_grid: bool = True,
         on_iteration: Callable[[IterationRecord], None] | None = None,
         kpi: DiscoveryTracker | None = None,
+        progress: Progress | None = None,
     ) -> None:
         self._cfg = cfg
         self._strategy = strategy
@@ -83,6 +87,7 @@ class DecisionLoop:
         self._grid = eval_grid(points, cfg.eval_grid) if write_grid else None
         self.on_iteration = on_iteration
         self._kpi = kpi
+        self._progress = progress
         self.state = PlannerState(
             candidates=candidates,
             points=points,
@@ -104,8 +109,26 @@ class DecisionLoop:
     def drilled_holes(self) -> list[int]:
         return [r.hole_idx for r in self.records if r.metres_drilled > 0]
 
+    async def _work(self, fn: Callable[..., Any], *args: Any) -> Any:
+        """Model work. In a demo it runs off the event loop so the live view stays responsive."""
+        return await asyncio.to_thread(fn, *args) if self._progress else fn(*args)
+
+    async def _show(self, stage: str) -> None:
+        if self._progress is not None:
+            self._progress.at(stage)
+            await asyncio.sleep(self._progress.pause_s)
+
     async def run(self) -> list[IterationRecord]:
         self._run_dir.mkdir(parents=True, exist_ok=True)
+        if self._progress is not None:
+            self._progress.running = True
+        try:
+            return await self._run()
+        finally:
+            if self._progress is not None:
+                self._progress.running = False
+
+    async def _run(self) -> list[IterationRecord]:
         self._req_id = await self._bridge.next_req_id() - 1
         drilled = 0
         iteration = 0
@@ -115,7 +138,7 @@ class DecisionLoop:
             iteration += 1
             record = await self._step(iteration)
             self.records.append(record)
-            self._write(record)
+            await self._work(self._write, record)
             if self.on_iteration:
                 self.on_iteration(record)
             if record.metres_drilled > 0:
@@ -125,8 +148,10 @@ class DecisionLoop:
 
     async def _step(self, iteration: int) -> IterationRecord:
         t: dict[str, float] = {}
+        if self._progress is not None:
+            self._progress.at("recommend", rejected=False)
         t0 = time.perf_counter()
-        rec = self._strategy.recommend(self.state)
+        rec = await self._work(self._strategy.recommend, self.state)
         t["recommend"] = time.perf_counter() - t0
         row = self._cand.loc[rec.hole_idx]
         self._req_id += 1
@@ -182,22 +207,25 @@ class DecisionLoop:
         if done.req_id != msg.req_id or done.hole_idx != msg.hole_idx:
             raise RuntimeError(f"completion {done} does not match request {msg.req_id}")
 
+        await self._show("assays")
         t4 = time.perf_counter()
         lab = pd.read_parquet(self._lab_dir / f"{msg.hole_idx}.parquet")
         self._pending.append(lab)
         if self._kpi is not None:
             self._kpi.add_hole(done.metres_drilled, None)
         # With a lag of k, a hole's assays arrive once k more holes have been drilled.
+        if self._progress is not None:
+            self._progress.at("learn")
         while len(self._pending) > self._cfg.assay_lag_holes:
             ready = self._pending.popleft()
             if len(ready):
-                self._model.condition(ready[["x", "y", "z"]].to_numpy(), ready["cu"].to_numpy())
+                xyz, cu = ready[["x", "y", "z"]].to_numpy(), ready["cu"].to_numpy()
+                await self._work(self._model.condition, xyz, cu)
                 if self._kpi is not None:
                     self._kpi.add_assays(ready)
         t["condition"] = time.perf_counter() - t4
         if self._kpi is not None:
             record.kpis = self._kpi.kpis().as_dict()
-            await self._bridge.publish_kpis(record.kpis)
 
         self.state.available.discard(msg.hole_idx)
         self.state.drilled_xy = np.vstack([self.state.drilled_xy, [[msg.collar_x, msg.collar_y]]])

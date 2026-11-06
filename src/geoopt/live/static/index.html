@@ -345,20 +345,11 @@ function view() {
              iter: r ? (replay.phase === "learn" ? r.iteration : r.iteration - 1) : null,
              stage: replay.phase === "drill" ? 3 : replay.phase === "assay" ? 4 : 5, live: false, req: r ? r.iteration : null };
   }
-  const opc = state && state.opc, cur = state && state.current;
-  let stage = -1, bad = false;
-  if (opc && opc["Rec.ReqId"] > 0) {
-    const R = opc["Rec.ReqId"];
-    if (opc["Chk.ReqId"] < R) stage = 1;
-    else if (opc["Chk.Status"] === 3) { stage = 1; bad = true; }
-    else if (opc["Appr.ReqId"] < R) stage = 2;
-    else if (opc["Appr.Decision"] === 2) { stage = 2; bad = true; }
-    else if (opc["Done.ReqId"] < R) stage = 3;
-    else stage = recs.length && recs[recs.length - 1].hole_idx === (cur && cur.hole_idx) ? 0 : 5;
-  }
+  const live = state && state.live, cur = state && state.current;
+  const stage = live ? live.stage : -1, bad = !!(live && live.rejected);
   const done = recs.some(r => cur && r.hole_idx === cur.hole_idx);
   return { recs, cur: cur ? { ...cur, metres: done ? recs.find(r => r.hole_idx === cur.hole_idx).metres : null } : null,
-           iter: null, stage, bad, live: !!opc, req: opc ? opc["Rec.ReqId"] : null };
+           iter: null, stage, bad, live: !!(live && live.running), req: live ? live.req_id : null };
 }
 
 async function poll() {
@@ -438,13 +429,11 @@ function drawSection(v, dt) {
   let depth;
   if (REPLAY) depth = replay.depth;
   else if (v.cur.metres != null) depth = v.cur.metres;
-  else if (v.live && v.stage === 3) {
-    const opc = state.opc;
-    if (opc["Rig.ReqId"] === opc["Rec.ReqId"] && opc["Rig.State"] === 2) depth = opc["Rig.DepthDrilled"];
-    else if (opc["Rig.ReqId"] === opc["Rec.ReqId"] && opc["Rig.State"] === 1) {
-      if (opc["Rig.DepthDrilled"] !== depthTarget) { depthTarget = opc["Rig.DepthDrilled"]; depthTime = performance.now(); }
-      depth = Math.min(planned, depthTarget + (performance.now() - depthTime) / 1000 * S.metres_per_second);
-    } else depth = 0;
+  else if (state && state.live && v.stage >= 3) {
+    // between polls, extrapolate at the rig's speed so the bit moves smoothly
+    const L = state.live;
+    if (L.depth_m !== depthTarget) { depthTarget = L.depth_m; depthTime = performance.now(); }
+    depth = v.stage === 3 ? Math.min(L.target_m, depthTarget + (performance.now() - depthTime) / 1000 * S.metres_per_second) : L.target_m;
   } else depth = v.stage >= 1 && v.stage < 3 ? 0 : planned;
   depthShown += (depth - depthShown) * Math.min(1, dt * 10);
   if (depth < depthShown) depthShown = depth;
@@ -623,13 +612,6 @@ function drawChart(v) {
 // ---------- panels ----------
 function kpisNow(v) {
   const last = v.recs.length ? v.recs[v.recs.length - 1].kpis : null;
-  if (v.live && state.opc && state.opc["Kpi.Holes"] > (last ? last.holes : 0) && !REPLAY) {
-    const o = state.opc, ok = o["Kpi.BaselineMetres"] >= 0;
-    return { holes: o["Kpi.Holes"], metres: o["Kpi.Metres"], ore_m: o["Kpi.OreMetres"], new_ore_mt: o["Kpi.NewOreMt"],
-             new_cu_kt: o["Kpi.NewCuKt"], drill_cost_aud_m: o["Kpi.DrillCostAudM"],
-             metres_saved: ok ? o["Kpi.MetresSaved"] : null, cost_saved_aud_m: ok ? o["Kpi.CostSavedAudM"] : null,
-             baseline_metres: ok ? o["Kpi.BaselineMetres"] : null };
-  }
   return last || { holes: 0, metres: 0, ore_m: 0, new_ore_mt: 0, new_cu_kt: 0, drill_cost_aud_m: 0 };
 }
 function drawMetrics(k) {
@@ -660,11 +642,11 @@ function drawCycle(v) {
     return `<span class="${cls}">${name}</span>`;
   }).join("");
   setHTML("cycle", html);
-  const l = $("link"), live = state && state.opc;
+  const l = $("link"), live = v.live;
   l.className = "link" + (live || REPLAY ? " on" : "");
-  l.title = `${REPLAY ? "Replaying" : live ? "OPC UA connected" : "OPC UA offline; reading the run folder"} · run ${state && state.run || "–"}` +
+  l.title = `${REPLAY ? "Replaying" : live ? "Planner running" : "Planner idle; showing the run folder"} · run ${state && state.run || "–"}` +
     (v.req ? ` · request ${v.req}` : "");
-  l.querySelector("span").textContent = REPLAY ? "Replay" : live ? "Live" : "Offline";
+  l.querySelector("span").textContent = REPLAY ? "Replay" : live ? "Live" : "Idle";
 }
 function drawTitle(v) {
   if (!v.cur) return;

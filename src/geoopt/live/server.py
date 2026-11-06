@@ -1,11 +1,10 @@
-"""Live drilling view: `geoopt live`. A read-only web page that animates the loop as it runs.
+"""Live drilling view: `geoopt demo` (run + view) and `geoopt live` (replay finished runs).
 
-It reads exactly what an operator-side display could read, and nothing else:
-- the OPC UA variables (recommendation, check, approval, dispatch, rig depth, KPIs), polled from
-  the server EAE (or the emulator) hosts; and
-- the run folder the planner writes (iteration records, model grid, released lab results).
-It never imports the planner, the model or the simulators, so it keeps working unchanged when
-real EAE devices replace the emulator and rig simulator.
+A read-only web page that animates the loop. It reads only:
+- the run folder the planner writes (iteration records, model grid, released lab results); and
+- during `geoopt demo`, the `Progress` the loop updates (cycle stage, rig depth).
+It never imports the planner, the model or the simulators; `geoopt demo` hands it the run as an
+opaque coroutine to start alongside the server.
 """
 
 from __future__ import annotations
@@ -15,36 +14,27 @@ import contextlib
 import json
 import logging
 import math
-from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator, Awaitable, Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
-import yaml
 from scipy.interpolate import RegularGridInterpolator
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse
 from starlette.routing import Route
 
-from geoopt.bridge.opcua_client import connect
 from geoopt.config import Config
 from geoopt.data.prepare import prepared_paths
+from geoopt.progress import STAGES, Progress
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
 SECTION_HALF_WIDTH_M = 450.0
 SECTION_BAND_M = 40.0  # samples and traces within this of the section plane are drawn
-
-
-@dataclass
-class LiveState:
-    cfg: Config
-    opc: dict[str, float] = field(default_factory=dict)
-    opc_ok: bool = False
 
 
 def _clean(v: Any) -> Any:
@@ -63,23 +53,6 @@ def _json(data: Any) -> JSONResponse:
     return JSONResponse(_clean(data))
 
 
-async def poll_opcua(state: LiveState) -> None:
-    """Keep a copy of every node's value; reconnect quietly while nothing is serving."""
-    names = list(state.cfg.nodes.nodes)
-    while True:
-        try:
-            async with connect(state.cfg) as s:
-                state.opc_ok = True
-                while True:
-                    state.opc = {n: float(await s.read(n)) for n in names}
-                    await asyncio.sleep(0.2)
-        except asyncio.CancelledError:
-            raise
-        except Exception:  # server not up yet, or went away
-            state.opc_ok = False
-            await asyncio.sleep(1.0)
-
-
 # Run folder ------------------------------------------------------------------------------
 
 
@@ -96,16 +69,9 @@ def _records(run: Path) -> list[dict]:
     return out
 
 
-def _lab_dir(run: Path) -> Path:
-    if (run / "lab").exists():
-        return run / "lab"
-    cfg = yaml.safe_load((run / "config.yaml").read_text())
-    return Path(cfg["loop"]["live_lab_dir"])
-
-
 def _lab(run: Path, hole_idx: int) -> pd.DataFrame | None:
     try:
-        return pd.read_parquet(_lab_dir(run) / f"{hole_idx}.parquet")
+        return pd.read_parquet(run / "lab" / f"{hole_idx}.parquet")
     except (OSError, ValueError):
         return None
 
@@ -135,11 +101,20 @@ def _grid_for(run: Path, iteration: int | None) -> tuple[RegularGridInterpolator
         return None
 
 
+def _report(task: asyncio.Task) -> None:
+    if not task.cancelled() and task.exception() is not None:
+        log.error("demo run failed", exc_info=task.exception())
+
+
 # App ---------------------------------------------------------------------------------------
 
 
-def build_app(cfg: Config) -> Starlette:
-    state = LiveState(cfg)
+def build_app(
+    cfg: Config,
+    progress: Progress | None = None,
+    job: Callable[[], Awaitable[None]] | None = None,
+) -> Starlette:
+    """`job` (the demo run) starts with the server; `progress` is what it reports."""
     paths = prepared_paths(cfg.data.processed_dir)
     cand = pd.read_parquet(paths.candidates).set_index("hole_idx", drop=False)
     seed = pd.read_parquet(paths.seed_composites)
@@ -170,6 +145,7 @@ def build_app(cfg: Config) -> Starlette:
                 "seed_collars": seed_collars[["x", "y"]].round(1).to_numpy().tolist(),
                 "baseline": baseline,
                 "metres_per_second": cfg.rig.metres_per_second,
+                "stages": list(STAGES),
                 "block_t": float(np.prod(cfg.backtest.block_size_m)) * cfg.kpi.density_t_m3,
                 "density_t_m3": cfg.kpi.density_t_m3,
             }
@@ -207,9 +183,9 @@ def build_app(cfg: Config) -> Starlette:
                     "kpis": r.get("kpis") or {},
                 }
             )
-        opc = state.opc if state.opc_ok else None
+        live = progress.as_dict() if progress is not None and progress.req_id > 0 else None
         current = None
-        hole_idx = int(opc["Rec.HoleIdx"]) if opc and opc.get("Rec.ReqId", 0) > 0 else None
+        hole_idx = live["hole_idx"] if live else None
         if hole_idx is None and rows:
             hole_idx = rows[-1]["hole_idx"]
         if hole_idx is not None and hole_idx in cand.index:
@@ -220,7 +196,7 @@ def build_app(cfg: Config) -> Starlette:
             {
                 "run": run.name if run else None,
                 "records": rows,
-                "opc": opc,
+                "live": live,
                 "current": current,
             }
         )
@@ -279,11 +255,14 @@ def build_app(cfg: Config) -> Starlette:
 
     @contextlib.asynccontextmanager
     async def lifespan(_: Starlette) -> AsyncIterator[None]:
-        task = asyncio.create_task(poll_opcua(state))
+        task = asyncio.create_task(job()) if job is not None else None
+        if task is not None:
+            task.add_done_callback(_report)
         try:
             yield
         finally:
-            task.cancel()
+            if task is not None:
+                task.cancel()
 
     routes = [
         Route("/", index),

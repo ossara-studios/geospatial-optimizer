@@ -30,9 +30,7 @@ def open_run(run_dir: Path) -> RunView:
     iterations = sorted(
         int(p.name.split("_")[1]) for p in run_dir.glob("iter_*") if (p / "record.json").exists()
     )
-    live_lab = Path(config["loop"]["live_lab_dir"])
-    lab_dir = run_dir / "lab" if (run_dir / "lab").exists() else live_lab
-    return RunView(run_dir, config, iterations, lab_dir)
+    return RunView(run_dir, config, iterations, run_dir / "lab")
 
 
 def records(run: RunView) -> pd.DataFrame:

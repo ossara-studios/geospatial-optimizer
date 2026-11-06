@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
 
-from geoopt.config import Limits, NodeSpec
+from geoopt.config import Limits
 from geoopt.limits import check_depth, check_recommendation
 from geoopt.protocol import CheckStatus, Reason
 
@@ -23,13 +22,6 @@ def test_depth_over_limit_is_clipped() -> None:
     assert result.status is CheckStatus.CLIPPED
     assert result.reason is Reason.DEPTH_CLIPPED
     assert result.depth == 500.0
-
-
-def test_node_spec_needs_exactly_one_identifier() -> None:
-    with pytest.raises(ValidationError):
-        NodeSpec(type="UInt32")
-    with pytest.raises(ValidationError):
-        NodeSpec(id="a", node_id="ns=2;s=a", type="UInt32")
 
 
 FULL = Limits(

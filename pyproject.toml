@@ -5,10 +5,9 @@ build-backend = "hatchling.build"
 [project]
 name = "geoopt"
 version = "0.1.0"
-description = "Adaptive exploration drillhole planner with an EAE (IEC 61499) OPC UA loop"
+description = "Adaptive exploration drillhole planner"
 requires-python = ">=3.11"
 dependencies = [
-    "asyncua>=1.1",
     "numpy>=1.26",
     "pandas>=2.2",
     "pyarrow>=15",
@@ -48,4 +47,3 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-markers = ["opcua: tests that start a local OPC UA server"]

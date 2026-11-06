@@ -1,4 +1,4 @@
-"""Codes and messages shared by the planner, the bridges and EAE (see docs/eae_contract.md)."""
+"""Codes and messages passed between the decision loop and the bridge."""
 
 from __future__ import annotations
 
@@ -23,13 +23,6 @@ class Reason(IntEnum):
     AZIMUTH_OUT_OF_RANGE = 5
 
 
-class RigState(IntEnum):
-    IDLE = 0
-    DRILLING = 1
-    COMPLETE = 2
-    FAULT = 9
-
-
 class Decision(IntEnum):
     APPROVED = 1
     DENIED = 2
@@ -43,7 +36,7 @@ class CheckResult:
 
 
 class RecommendationMsg(BaseModel):
-    """Everything the planner sends to EAE for one request (all scalars)."""
+    """Everything the planner sends for one request."""
 
     model_config = ConfigDict(frozen=True)
 

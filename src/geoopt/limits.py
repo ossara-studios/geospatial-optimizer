@@ -1,4 +1,4 @@
-"""Pure limit checks, mirrored by the EAE limit-check function block.
+"""Pure limit checks on a recommended hole.
 
 Order: site bounds, no-go zones, dip, azimuth (all REJECT), then depth (CLIP).
 A collar can't be moved in replay mode (a moved hole doesn't exist in the dataset),

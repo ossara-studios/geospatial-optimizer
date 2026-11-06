@@ -1,4 +1,3 @@
-# Shared with the EAE project: the EAE limit-check FB must use the same values.
 # Local metres relative to data.origin (SW corner of the Hillside deposit area, MGA53).
 # Checks: bounds / no-go / dip / azimuth REJECT; depth over max CLIPS.
 # All limits and zones are ILLUSTRATIVE (made up for the demo), not real site constraints.

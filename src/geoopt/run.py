@@ -1,4 +1,4 @@
-"""Composition root: wires prepared data, model, strategy, simulators and a bridge into a run.
+"""Composition root: wires prepared data, model, strategy and simulators into a run.
 
 This is the only place the held-out truth path is handed to anything, and it goes to LabSim.
 """
@@ -6,7 +6,6 @@ This is the only place the held-out truth path is handed to anything, and it goe
 from __future__ import annotations
 
 import logging
-import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -17,16 +16,15 @@ import yaml
 
 from geoopt.bridge.base import Bridge
 from geoopt.bridge.inprocess import InProcessBridge
-from geoopt.bridge.opcua import OpcUaBridge
 from geoopt.config import Config
 from geoopt.data.prepare import prepared_paths
 from geoopt.kpi import DiscoveryTracker, kpi_geometry, load_baseline
 from geoopt.loop import DecisionLoop, IterationRecord
 from geoopt.model.gp import GPOreModel
 from geoopt.planner.strategies import make_strategy
+from geoopt.progress import Progress
 from geoopt.sim.lab import LabSim
 from geoopt.sim.rig import RigSim
-from geoopt.sim.rig_client import serve_rig
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +67,7 @@ def build_loop(
     rng_seed: int | None = None,
     write_grid: bool = True,
     with_kpis: bool = False,
+    progress: Progress | None = None,
 ) -> DecisionLoop:
     seed = cfg.seed if rng_seed is None else rng_seed
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -90,6 +89,7 @@ def build_loop(
         lab_dir=lab_dir,
         write_grid=write_grid,
         kpi=discovery_tracker(cfg, inputs) if with_kpis else None,
+        progress=progress,
     )
 
 
@@ -117,50 +117,32 @@ def build_inprocess_loop(
     rng_seed: int | None = None,
     write_grid: bool = True,
     with_kpis: bool = False,
+    progress: Progress | None = None,
 ) -> tuple[DecisionLoop, LabSim]:
     seed = cfg.seed if rng_seed is None else rng_seed
     inputs = load_planner_inputs(cfg)
     lab_dir = run_dir / "lab"
     lab = LabSim(prepared_paths(cfg.data.processed_dir).heldout_composites, lab_dir)
-    bridge = InProcessBridge(cfg.limits, RigSim(inputs.candidates, seed), lab)
+    rig = RigSim(inputs.candidates)
+    bridge = InProcessBridge(cfg.limits, rig, lab, progress, cfg.rig.metres_per_second)
     loop = build_loop(
-        cfg, inputs, strategy_name, bridge, run_dir, lab_dir, seed, write_grid, with_kpis
+        cfg, inputs, strategy_name, bridge, run_dir, lab_dir, seed, write_grid, with_kpis, progress
     )
     return loop, lab
 
 
 async def run_inprocess(
-    cfg: Config, strategy_name: str, run_dir: Path | None = None
+    cfg: Config,
+    strategy_name: str,
+    run_dir: Path | None = None,
+    progress: Progress | None = None,
 ) -> list[IterationRecord]:
+    """One run, instant by default; with `progress` it runs at demo pace for the live view."""
     run_dir = run_dir or new_run_dir(cfg, strategy_name)
-    loop, _ = build_inprocess_loop(cfg, strategy_name, run_dir, with_kpis=True)
+    loop, _ = build_inprocess_loop(cfg, strategy_name, run_dir, with_kpis=True, progress=progress)
     records = await loop.run()
     log.info("run written to %s", run_dir)
     return records
-
-
-async def run_opcua(
-    cfg: Config, strategy_name: str, run_dir: Path | None = None
-) -> list[IterationRecord]:
-    """Planner side of a live run. EAE (or the emulator) and `geoopt rig-sim` run separately."""
-    run_dir = run_dir or new_run_dir(cfg, f"{strategy_name}-opcua")
-    inputs = load_planner_inputs(cfg)
-    async with OpcUaBridge.connect(cfg) as bridge:
-        loop = build_loop(
-            cfg, inputs, strategy_name, bridge, run_dir, cfg.loop.live_lab_dir, with_kpis=True
-        )
-        records = await loop.run()
-    log.info("run written to %s", run_dir)
-    return records
-
-
-async def run_rig_sim(cfg: Config) -> None:
-    """Rig + lab simulator for live runs. Owns the held-out truth; clears old lab drops."""
-    paths = prepared_paths(cfg.data.processed_dir)
-    shutil.rmtree(cfg.loop.live_lab_dir, ignore_errors=True)
-    lab = LabSim(paths.heldout_composites, cfg.loop.live_lab_dir)
-    rig = RigSim(pd.read_parquet(paths.candidates), cfg.seed)
-    await serve_rig(cfg, rig, lab)
 
 
 def summarize(records: list[IterationRecord]) -> dict[str, float]:
