@@ -5,8 +5,13 @@ against held-out historical assays, updates the ore model and repeats.
 
 ## Quick start: the live demo
 After [Setup](#setup), one command:
+Windows (PowerShell):
+```powershell
+.venv\Scripts\geoopt demo
+```
+macOS / Linux:
 ```bash
-.venv/bin/geoopt demo          # Windows: .venv\Scripts\geoopt demo
+.venv/bin/geoopt demo
 ```
 It opens http://localhost:8600 and drills 20 holes at demo pace (about 5 s a hole), showing each
 recommendation, the drilling, the assays coming back and the model updating. The first run also
