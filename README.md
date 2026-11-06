@@ -22,8 +22,25 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.lock
 .venv/bin/pip install --no-deps -e .
 ```
-The raw data isn't in the repo (see [Data](#data)). Copy `data/raw/hillside/` (about 12 MB) from
-a machine that has it. The demo prepares it on first run; otherwise run `geoopt prepare`.
+
+### Get the data
+The drillhole data isn't in the repo. It's public, from the South Australian government's SARIG
+data package, and one script downloads it and builds `data/raw/hillside/`:
+
+Windows (PowerShell):
+```powershell
+.venv\Scripts\python scripts\fetch_hillside.py
+```
+macOS / Linux:
+```bash
+.venv/bin/python scripts/fetch_hillside.py
+```
+It downloads a 140 MB drillhole list, then streams the 23 GB geochemistry file and keeps only
+Hillside's copper assays, so it needs almost no disk space. The result is about 12 MB. The SARIG
+server is slow per connection (about 0.6 MB/s when this was first fetched), so the script opens
+32 at once (`--workers` to change). That makes it about 20 minutes on a fast connection, and
+longer on a slow one. It prints progress and a time estimate. If it stops, run it again: it
+resumes where it left off. Once `data/raw/hillside/` exists, `geoopt demo` does the rest.
 
 The commands below are written as `geoopt …`. Run them as `.venv\Scripts\geoopt …` on Windows
 or `.venv/bin/geoopt …` on macOS/Linux, or activate the venv first.
@@ -84,7 +101,7 @@ sensible start.
 Hillside Cu-Au deposit (Rex Minerals), Yorke Peninsula, South Australia. The holes come from the
 SARIG data package (July 2025 extract). Attribution: Department for Energy and Mining,
 Government of South Australia, Geoscientific Data, sourced on 4 November 2026,
-https://map.sarig.sa.gov.au/ (CC-BY 4.0). To rebuild the raw tables from SARIG, see
+https://map.sarig.sa.gov.au/ (CC-BY 4.0). What the download keeps and why is in
 [scripts/fetch_data.md](scripts/fetch_data.md).
 
 ## Checks
